@@ -1,0 +1,31 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "author": {
+    "name": "Burhan Çetinkaya"
+  },
+  "description": "Birlikte film seç, BurhanTv arşivinde bul ve seçtiğin TV’de aç.",
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "brandColor": "#E50914",
+        "capabilities": [],
+        "category": "Entertainment",
+        "composerIcon": "./assets/icon-square.png",
+        "defaultPrompt": [
+          "Eşimle bu akşam ne izleyelim?",
+          "IMDb 7 üstü, iki saatten kısa gerilim öner.",
+          "Seçtiğim filmi salon TV’de aç."
+        ],
+        "developerName": "Burhan Çetinkaya",
+        "displayName": "BurhanTv Asistan",
+        "logo": "./assets/icon-square.png",
+        "longDescription": "TV arşivinde arama, doğrulanmış IMDb puanı ve süreyle film seçimi, sayfa bağlantısını çözme denemesi ve eşleştirilmiş TV’de oynatma. TV uygulamasının açık olması gerekir.",
+        "shortDescription": "Film seç, TV’de aç",
+        "logoDark": "./assets/icon-square.png",
+        "composerIconDark": "./assets/icon-square.png"
+      }
+    }
+  },
+  "name": "burhantv-assistant",
+  "version": "1.0.5"
+}

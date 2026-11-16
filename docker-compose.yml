@@ -9,6 +9,9 @@ services:
       # Persists the SQLite DB (incl. your provider credentials) + image cache.
       # Kept on the host, never inside the image. Do NOT commit or share this dir.
       - ./data:/app/data
+    env_file:
+      - path: .env.local
+        required: false
     environment:
       - PORT=3000
       - HOST=0.0.0.0

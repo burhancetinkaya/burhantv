@@ -78,7 +78,7 @@ export default function Home() {
   return (
     <div>
       {/* Desktop: hero banner */}
-      {!isTV && <Hero item={data.hero} onMore={(it) => openDetail(it.type, it.id)} />}
+      {<Hero item={data.hero} onMore={(it) => openDetail(it.type, it.id)} />}
 
       {/* TV: quick navigation — no hero, autofocus on Live TV */}
       {isTV && (
@@ -99,6 +99,9 @@ export default function Home() {
             <Icon name="search" size={36} />
             <span>{t('Cerca')}</span>
           </button>
+          <button className="tv-quick-btn" data-focusable onClick={() => navigate('/assistant')}>
+            <Icon name="star" size={36} /><span>ChatGPT Asistan</span>
+          </button>
           <button className="tv-quick-btn" data-focusable onClick={() => navigate('/settings')}>
             <Icon name="settings" size={36} />
             <span>{t('Impostazioni')}</span>
@@ -118,7 +121,7 @@ export default function Home() {
         ))}
         {(data.rows || []).map((r, i) => {
           var rowTitle = r.titleKey ? t(r.titleKey, r.titleParams) : r.title;
-          var isTop = rowTitle && (rowTitle.indexOf('votati') >= 0 || rowTitle.indexOf('Top') >= 0 || rowTitle.indexOf('top') >= 0);
+          var isTop = r.titleKey === 'Più votati' || rowTitle && (rowTitle.indexOf('votati') >= 0 || rowTitle.indexOf('Top') >= 0 || rowTitle.indexOf('top') >= 0);
           return <Row key={i} title={isTop && isTV ? 'Top 10' : rowTitle} items={r.items} poster={r.type !== 'live'} progressMap={progressMap} onItem={onItem} numbered={isTop} />;
         })}
         {(!data.rows || data.rows.length === 0) && (

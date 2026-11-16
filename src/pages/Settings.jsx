@@ -157,16 +157,16 @@ export default function Settings() {
               {xtreamConfigured() ? '✅ ' + t('Connesso — lo streaming va direttamente dal provider senza server intermedio.') : t('Collega l\'app direttamente al provider IPTV. Lo streaming va dal provider alla TV senza passare dal Mac.')}
             </div>
             <div className="field">
-              <label>Server URL</label>
+              <label>{t('URL del server')}</label>
               <input className="input" placeholder="http://provider.com" defaultValue={(getXtreamProvider() || {}).url || ''} id="xtream-url" data-focusable />
             </div>
             <div className="field">
-              <label>Username</label>
-              <input className="input" placeholder="username" defaultValue={(getXtreamProvider() || {}).username || ''} id="xtream-user" data-focusable />
+              <label>{t('Nome utente')}</label>
+              <input className="input" placeholder={t('nome utente')} defaultValue={(getXtreamProvider() || {}).username || ''} id="xtream-user" data-focusable />
             </div>
             <div className="field">
-              <label>Password</label>
-              <input className="input" type="password" placeholder="password" defaultValue={(getXtreamProvider() || {}).password || ''} id="xtream-pass" data-focusable />
+              <label>{t('Password')}</label>
+              <input className="input" type="password" placeholder={t('password')} defaultValue={(getXtreamProvider() || {}).password || ''} id="xtream-pass" data-focusable />
             </div>
             <div style={{ display: 'flex', flexWrap: 'wrap' }}>
               <button className="btn btn-red" data-focusable onClick={() => {
@@ -180,7 +180,7 @@ export default function Settings() {
               {xtreamConfigured() && (
                 <button className="btn btn-info" style={{ marginLeft: 12 }} data-focusable onClick={() => {
                   clearXtreamProvider();
-                  setMsg(t('Connessione diretta rimossa. Usa il server Retflix.'));
+                  setMsg(t('Connessione diretta rimossa. Usa il server BurhanTv.'));
                 }}>{t('Disconnetti')}</button>
               )}
             </div>
@@ -188,19 +188,19 @@ export default function Settings() {
 
           <div style={{ marginTop: 18 }}>
             <label style={{ display: 'block', fontSize: 13, color: '#bbb', marginBottom: 6 }}>
-              {t('Server Retflix (per libreria e immagini)')}
+              {t('Server BurhanTv (per libreria e immagini)')}
             </label>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <input
                 className="input" style={{ flex: 1, minWidth: 220 }}
-                placeholder="http://192.168.0.39:3000"
+                placeholder="http://localhost:3000"
                 value={serverInput} onChange={(e) => setServerInput(e.target.value)}
                 data-focusable
               />
               <button className="btn btn-info" onClick={() => { setServerUrl(serverInput.replace(/\/+$/, '')); setMsg(t('Server salvato. Ricarica la pagina.')); }} data-focusable>{t('Salva')}</button>
             </div>
             <div style={{ color: '#777', fontSize: 12, marginTop: 6 }}>
-              {t('Il server Retflix serve per la libreria, i poster e i metadati. Lo streaming va diretto dal provider se configurato sopra.')}
+              {t('Il server BurhanTv serve per la libreria, i poster e i metadati. Lo streaming va diretto dal provider se configurato sopra.')}
             </div>
           </div>
 
@@ -230,7 +230,7 @@ export default function Settings() {
           <div className="modal-facts" style={{ marginTop: 0, fontSize: 14 }}>
             {provider?.type === 'm3u' ? (
               <>
-                <div><b>Tipo:</b> M3U / M3U8</div>
+                <div><b>{t('Tipo:')}</b> M3U / M3U8</div>
                 <div><b>URL:</b> {provider?.m3u_url}</div>
                 <div><b>{t('Ultima sincronizzazione:')}</b> {lastSync}</div>
               </>

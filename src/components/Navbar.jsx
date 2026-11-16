@@ -1,3 +1,4 @@
+import BrandLogo from './BrandLogo';
 import React, { useEffect, useState } from 'react';
 import { NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
 import { useI18n } from '../i18n.js';
@@ -30,13 +31,14 @@ export default function Navbar() {
         <span /><span /><span />
       </button>
 
-      <Link to="/" className="logo" data-focusable tabIndex={0}>RETFLIX</Link>
+      <Link to="/" className="logo" data-focusable tabIndex={0} aria-label="BurhanTv ana sayfa"><BrandLogo /></Link>
 
       <nav className="nav-links">
         <NavLink to="/" end data-focusable tabIndex={0}>{t('Home')}</NavLink>
         <NavLink to="/movies" data-focusable tabIndex={0}>{t('Film')}</NavLink>
         <NavLink to="/series" data-focusable tabIndex={0}>{t('Serie TV')}</NavLink>
         <NavLink to="/live" data-focusable tabIndex={0}>{t('Live TV')}</NavLink>
+      <NavLink to="/send-to-tv" data-focusable tabIndex={0}>Telefondan Gönder</NavLink>
       </nav>
 
       <div className="nav-right">

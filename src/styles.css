@@ -637,7 +637,7 @@ img { display: block; }
 .tv .rows { margin-top: 0; padding-top: 40px; }
 .tv .row { margin-bottom: 56px; }
 .tv .row-title { font-size: 34px; font-weight: 700; margin-bottom: 20px; padding: 0 5%; }
-.tv .row-track { padding: 16px 5% 32px; }
+.tv .row-track { padding: 16px 5% 32px; scroll-behavior: auto; }
 .tv .row-track > * + * { margin-left: 24px; }
 /* 4 cards visible: (1920 - 10% margins) / 4 ≈ 415px */
 .tv .card { width: 415px; height: 234px; padding-top: 0; border-radius: 10px; }
@@ -1119,3 +1119,65 @@ img { display: block; }
   opacity: 0; -webkit-animation: tvspinnershow 0.4s ease 0.5s forwards; animation: tvspinnershow 0.4s ease 0.5s forwards;
 }
 .tv .watch-status .spinner { width: 100px; height: 100px; border-width: 7px; opacity: 1; -webkit-animation: none; animation: none; }
+
+/* BurhanTv wordmark */
+.logo{background:#e50914;color:#fff;padding:8px 14px;border-radius:6px;letter-spacing:-1px}.tv .logo{color:#fff;font-size:34px}
+
+/* Keep the wordmark legible when legacy TV styles load afterwards. */
+.nav a.logo, .tv .nav a.logo { color:#fff; -webkit-text-fill-color:#fff; background:#e50914; }
+
+/* Isolated website embedding experiment. */
+.web-test{padding:110px 4vw 32px;max-width:1920px;margin:auto}
+.web-test-heading{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px}
+.web-test-heading h1{margin:0;font-size:32px}.web-test-heading small{font-size:14px;color:#ddd;background:#333;border-radius:4px;padding:5px 8px;vertical-align:middle}
+.web-test-form label{display:block;margin-bottom:8px;color:#ccc}
+.web-test-form>div{display:flex}.web-test-form input{flex:1;min-width:0;padding:14px;background:#242424;color:#fff;border:1px solid #666;border-radius:5px;margin-right:12px;font-size:18px}
+.web-test-tools{display:flex;margin-top:14px}.web-test-tools>*+*{margin-left:12px}
+.web-test-status{color:#fff;margin:18px 0 8px}.web-test-note{color:#aaa;font-size:14px;line-height:1.5;max-width:1100px}
+.web-test-stage{margin-top:18px;height:68vh;min-height:400px;background:#090909;border:1px solid #444;border-radius:8px;overflow:hidden}
+.web-test-stage iframe{display:block;width:100%;height:100%;border:0;background:#fff}.web-test-empty{padding:70px;text-align:center;color:#aaa}
+.web-test button:disabled{opacity:.4}.web-test input:focus,.web-test button:focus{outline:3px solid #fff;outline-offset:3px}
+.tv .web-test{padding-top:135px}.tv .web-test .btn{font-size:23px}.tv .web-test-note{font-size:18px}
+@media(max-width:650px){.web-test{padding-top:95px}.web-test-heading h1{font-size:23px}.web-test-form>div{flex-direction:column}.web-test-form input{margin-right:0;margin-bottom:12px}.web-test-tools{flex-wrap:wrap}.web-test-tools .btn{font-size:13px;padding:10px}.web-test-stage{height:65vh}}
+
+.receive-link h1{margin-bottom:20px}.receive-link>p{color:#ccc;line-height:1.6}.receive-card{display:flex;align-items:center;background:#222;border:1px solid #444;border-radius:12px;padding:28px;margin:30px 0;max-width:1200px}.receive-card img{flex-shrink:0;border-radius:6px;margin-right:36px}.receive-card p{line-height:1.6;color:#ccc}.receive-address{overflow-wrap:break-word;word-break:break-all}.receive-wait{color:#fff!important;font-weight:bold}.receive-actions>*+*{margin-left:18px}.tv .receive-link{padding-top:145px}.tv .receive-link p{font-size:25px}.tv .receive-card h2{font-size:32px}
+@media(max-width:650px){.receive-card{flex-direction:column;align-items:flex-start;padding:18px}.receive-card img{margin:0 auto 20px;width:230px;height:230px}}
+
+/* Embedded MP4 text track overlay for the local Mac trial. */
+.embedded-caption{position:absolute;left:10%;right:10%;bottom:8%;z-index:12;text-align:center;white-space:pre-line;font-size:clamp(22px,2.6vw,46px);font-weight:600;line-height:1.35;color:#fff;text-shadow:0 2px 4px #000,2px 0 3px #000,-2px 0 3px #000;pointer-events:none}.embedded-caption.controls-visible{bottom:180px}
+.pl-subtitle-button{border:1px solid #999;background:#222b;color:#fff;padding:8px 15px;border-radius:6px;font-size:17px;cursor:pointer}
+.subtitle-menu{position:absolute;z-index:40;right:4%;bottom:135px;width:360px;max-height:70vh;overflow:auto;background:rgba(24,24,24,.98);border:1px solid #666;padding:20px;border-radius:10px;box-shadow:0 10px 40px #0008}.subtitle-menu-header{display:flex;align-items:center;justify-content:space-between}.subtitle-menu h2{margin:0;font-size:25px}.subtitle-menu p{color:#bbb;font-size:15px;line-height:1.5}.subtitle-menu button{display:block;width:100%;padding:12px;margin-top:8px;border:1px solid #555;border-radius:5px;background:#303030;color:white;text-align:left;font-size:17px;cursor:pointer}.subtitle-menu button.selected{border-color:#e50914;background:#6b1015}.subtitle-menu-header button{width:auto;margin:0}.subtitle-offset{border-top:1px solid #555;margin-top:20px;padding-top:18px}.subtitle-offset>div{display:flex}.subtitle-offset button{font-size:14px;text-align:center}.subtitle-offset button+button{margin-left:6px}
+
+.tv .subtitle-menu{width:510px;bottom:155px;padding:26px}.tv .subtitle-menu h2{font-size:32px}.tv .subtitle-menu button{font-size:26px;padding:15px}.tv .subtitle-menu p{font-size:21px}.tv .pl-subtitle-button{font-size:25px;padding:10px 20px}.tv .subtitle-offset{font-size:23px}
+
+.sent-links{margin-top:30px;max-width:1500px}.sent-links-heading{display:flex;align-items:baseline;justify-content:space-between}.sent-links-heading h2{font-size:28px;margin:0}.sent-links-heading>span{color:#aaa}.sent-links-note{font-size:15px!important;color:#999;line-height:1.5}.sent-links-grid{display:flex;flex-wrap:wrap;margin:0 -8px}.sent-link-card{width:calc(33.333% - 16px);margin:8px;background:#202020;border:1px solid #414141;border-radius:10px;overflow:hidden;display:flex;flex-direction:column}.sent-link-open{display:block;flex:1;width:100%;text-align:left;color:#fff;background:transparent;border:0;padding:22px;cursor:pointer}.sent-link-open h3{font-size:21px;line-height:1.35;margin:16px 0 12px;overflow-wrap:break-word;word-break:break-word}.sent-link-play{display:inline-block;color:#fff;background:#e50914;border-radius:50%;padding:11px 13px;font-size:18px}.sent-link-host,.sent-link-open time{display:block;color:#aaa;font-size:14px;margin:5px 0}.sent-link-action{display:block;margin-top:18px;color:#eee;font-size:16px}.sent-link-delete{border:0;border-top:1px solid #444;background:#2a2a2a;color:#ddd;padding:12px;font-size:17px;cursor:pointer}.sent-link-delete:focus{background:#9b1520}.sent-link-open:focus{outline:3px solid #fff;outline-offset:-4px;background:#333}.sent-link-delete:focus,.sent-links-notice button:focus{outline:3px solid #fff;outline-offset:-4px}.sent-links-empty{border:1px dashed #555;border-radius:8px;padding:24px;color:#aaa}.sent-links-notice{display:flex;align-items:center;background:#293029;padding:12px 18px;border-radius:6px;margin:15px 0}.sent-links-notice button{margin-left:20px;padding:8px 16px;background:#444;color:#fff;border:1px solid #999;border-radius:5px;font-size:18px}.sent-history-warning{position:absolute;top:90px;left:5%;right:5%;z-index:50;padding:18px;background:#5b3219;color:#fff}.tv .sent-link-open h3{font-size:28px}.tv .sent-link-host,.tv .sent-link-open time{font-size:20px}.tv .sent-link-action,.tv .sent-link-delete{font-size:23px}.tv .sent-links-heading h2{font-size:34px}.tv .sent-links-note{font-size:20px!important}.tv .sent-links-notice{font-size:24px}.tv .sent-links-notice button{font-size:24px}
+@media(max-width:850px){.sent-link-card{width:calc(50% - 16px)}}@media(max-width:520px){.sent-link-card{width:calc(100% - 16px)}}
+
+.receive-heading{display:flex;align-items:center;justify-content:space-between;max-width:1500px}.receive-heading h1{margin-bottom:10px}.receive-heading .btn{margin-left:20px}
+
+.sent-link-progress{height:5px;background:#555;border-radius:3px;overflow:hidden;margin-top:18px}.sent-link-progress>div{height:100%;background:#e50914}
+
+/* Approved raster wordmark: consistent across Samsung and desktop fonts. */
+.brand-image { display:block; width:100%; height:auto; }
+.nav a.logo, .tv .nav a.logo { display:block; width:150px; padding:0; overflow:hidden; border-radius:4px; line-height:0; }
+.tv .nav a.logo { width:210px; }
+.setup-card .logo, .sync-box .logo { width:250px; padding:0; margin-left:auto; margin-right:auto; overflow:hidden; }
+.loader.full { flex-direction:column; }
+.brand-flicker { width:280px; line-height:0; overflow:hidden; border-radius:4px; }
+.tv .loader .brand-flicker { width:520px; }
+
+/* Source-labelled ratings and evening viewing information. */
+.card-imdb { position:absolute; top:10px; right:10px; z-index:4; padding:4px 7px; background:#f5c518; color:#101010; font-size:13px; font-weight:800; border-radius:4px; }
+.tv .card-imdb { top:12px; right:12px; font-size:21px; padding:5px 9px; }
+.imdb-pill { display:inline-block; background:#f5c518; color:#101010; padding:3px 9px; border-radius:4px; font-weight:800; }
+.finish-time { margin:14px 0; color:#f5f5f5; font-size:17px; }
+.finish-time small { color:#bbb; font-size:.85em; }
+.tv .finish-time { font-size:26px; margin:18px 0; }
+.imdb-filters { display:flex; flex-wrap:wrap; align-items:center; margin:10px 0 24px; }
+.imdb-filters>button { margin-right:16px; margin-bottom:10px; }
+.imdb-filters p { width:100%; margin:4px 0; color:#bbb; font-size:15px; }
+.tv .imdb-filters p { font-size:22px; }
+
+.imdb-source { color:#aaa; font-size:14px; }.tv .imdb-source { font-size:21px; }
+
+.assistant-card{max-width:900px;background:#202020;border:1px solid #444;border-radius:12px;padding:30px}.assistant-code{display:block;letter-spacing:8px;font-size:42px;color:#f5c518;margin:20px 0}.tv .assistant-page p{font-size:25px}.tv .assistant-code{font-size:58px}.assistant-note{color:#bbb;line-height:1.5}

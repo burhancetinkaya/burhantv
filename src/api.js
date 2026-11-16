@@ -1,7 +1,8 @@
 // Backend base URL: empty when served by Express (same origin), or the Mac's
 // LAN address when running as a standalone Tizen/TV app.
-let _base = '';
-try { _base = localStorage.getItem('retlix-server') || ''; } catch {}
+import { backendUrl } from './config.js';
+let _base = backendUrl;
+try { _base = localStorage.getItem('retlix-server') || backendUrl; } catch {}
 export function getServerUrl() { return _base; }
 export function setServerUrl(url) { _base = url; try { localStorage.setItem('retlix-server', url); } catch {} }
 function u(path) { return _base + path; }

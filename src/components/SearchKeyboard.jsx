@@ -29,7 +29,7 @@ export default function SearchKeyboard({ onKey, onBackspace, onSpace, onClear })
   };
 
   return (
-    <div className="kbd" role="group" aria-label="Tastiera">
+    <div className="kbd" role="group" aria-label={t('Tastiera')}>
       <div className="kbd-grid" ref={gridRef} onKeyDown={onGridKeyDown}>
         {KEYS.map((k) => (
           <button key={k} type="button" data-k className="kbd-key" onClick={() => onKey(k)}>{k}</button>
@@ -37,10 +37,10 @@ export default function SearchKeyboard({ onKey, onBackspace, onSpace, onClear })
       </div>
       <div className="kbd-actions">
         <button type="button" className="kbd-key kbd-wide" onClick={onSpace}>{t('Spazio')}</button>
-        <button type="button" className="kbd-key" onClick={onBackspace} aria-label="Cancella">
+        <button type="button" className="kbd-key" onClick={onBackspace} aria-label={t('Cancella')}>
           <Icon name="back" size={20} />
         </button>
-        <button type="button" className="kbd-key" onClick={onClear} aria-label="Pulisci">
+        <button type="button" className="kbd-key" onClick={onClear} aria-label={t('Pulisci')}>
           <Icon name="close" size={20} />
         </button>
       </div>

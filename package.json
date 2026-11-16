@@ -1,5 +1,5 @@
 {
-  "name": "retlix",
+  "name": "burhantv",
   "version": "1.0.0",
   "private": true,
   "type": "module",
@@ -10,13 +10,18 @@
     "dev:client": "vite",
     "build": "vite build",
     "start": "cross-env NODE_ENV=production node server/index.js",
-    "setup": "npm install && npm run build"
+    "setup": "npm install && npm run build",
+    "links": "node server/link-relay.js",
+    "build:tv": "bash build-burhantv.sh",
+    "plugin:build": "node scripts/build-plugin.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.2.0",
     "compression": "^1.7.5",
     "cors": "^2.8.5",
-    "express": "^4.21.2"
+    "express": "^4.21.2",
+    "mp4box": "^2.5.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "@vitejs/plugin-legacy": "^5.4.3",
@@ -31,5 +36,8 @@
     "react-router-dom": "^6.28.0",
     "terser": "^5.51.2",
     "vite": "^5.4.11"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

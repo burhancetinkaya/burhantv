@@ -1,9 +1,11 @@
+import tr from './tr.js';
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 
 // Lightweight i18n (no deps). The Italian source string is the key; missing
 // translations fall back to it gracefully. Supports {name} interpolation.
 
 export const LANGUAGES = [
+  { code: 'tr', label: 'Türkçe' },
   { code: 'it', label: 'Italiano' },
   { code: 'en', label: 'English' },
   { code: 'es', label: 'Español' },
@@ -13,6 +15,7 @@ export const LANGUAGES = [
 ];
 
 const DICT = {
+  tr,
   en: {
     // nav
     'Home': 'Home', 'Film': 'Movies', 'Serie TV': 'TV Shows', 'Live TV': 'Live TV',

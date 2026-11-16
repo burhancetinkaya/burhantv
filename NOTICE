@@ -1,0 +1,9 @@
+BurhanTv is a fork and adaptation of Retflix (repository: simoncena/retlix).
+Upstream: https://github.com/simoncena/retlix
+
+Original copyright: Copyright (c) 2026 Retlix contributors.
+The original MIT license text is preserved in LICENSE.
+
+BurhanTv modifications: Turkish localization, branding, TV compatibility fixes,
+link sending/history/resume, subtitle integration, IMDb cache/filtering, finish
+time, ChatGPT MCP/OAuth integration and startup catalog synchronization.

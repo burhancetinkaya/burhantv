@@ -1,13 +1,46 @@
 node_modules/
+**/node_modules/
 dist/
 data/
-*.log
-.DS_Store
-
-# Tizen TV build output
+build/
 tizen-build/
 *.wgt
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+*.env
+*.p12
+*.pfx
+*.pem
+*.key
+*.crt
+*.db
+*.db-*
+*.sqlite*
+.netlify/
+**/.netlify/
+.codebase-memory/
+**/.codebase-memory/
+tizen/index.saved.html
+chatgpt-plugin/**/.app.json
+chatgpt-plugin/**/.mcp.json
+chatgpt-plugin/**/mcp.json
 
-# Tizen certificates (contain device-specific keys)
-tizen/
-!tizen/config.xml
+# Private workstation installation notes and legacy bootstrap helpers
+BURHANTV-OKU.md
+MAC-ALTYAZI-DENEMESI.md
+TV-ALTYAZI-DOGRULAMA.md
+WEB-DENEME.md
+_probe.mjs
+docs/KURULU-TVLER.md
+docs/CHATGPT-ASISTAN.md
+docs/IMDB-VE-BITIS-SAATI.md
+docs/TV-GERI-DONUS.md
+docs/TV-YATAY-KAYDIRMA.md
+docs/BURHANTV-MARKA.md
+chatgpt-plugin/**/.codex-plugin/

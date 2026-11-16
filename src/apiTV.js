@@ -1,3 +1,4 @@
+import { tvTmdbKey, saveTvTmdbKey, localizeTvItem } from './tmdbTV.js';
 // Fully standalone Xtream Codes API for Samsung TV.
 // No server needed — fetches everything directly from the provider.
 // Stores progress in localStorage. Caches stream lists in memory.
@@ -76,6 +77,44 @@ export function isLibraryLoaded() {
   return !!(_cache.movie || _cache.series || _cache.live);
 }
 
+// One provider refresh per app launch, shared by React's development remounts.
+// Keep saved lists until their replacement has been fetched and validated.
+var _startupRefresh = null;
+var _startupCatalogFresh = false;
+export function isStartupCatalogFresh() { return _startupCatalogFresh; }
+export function refreshLibraryOnStartup() {
+  if (_startupRefresh) return _startupRefresh;
+  loadLibraryFromStorage();
+  _startupRefresh = (async function() {
+    var failed = [];
+    var sources = [
+      ['movie', 'vodCats', xtreamApi.vodCategories, xtreamApi.vodStreams, mapMovie],
+      ['series', 'seriesCats', xtreamApi.seriesCategories, xtreamApi.series, mapSeries],
+      ['live', 'liveCats', xtreamApi.liveCategories, xtreamApi.liveStreams, mapLive],
+    ];
+    for (var source of sources) {
+      try {
+        var cats = await source[2]();
+        var streams = await source[3]();
+        if (!Array.isArray(cats) || !Array.isArray(streams)) throw new Error('Geçersiz arşiv yanıtı');
+        var mappedCats = cats.map(function(c) {
+          return { category_id: String(c.category_id), name: c.category_name, count: 0 };
+        });
+        var mapped = streams.map(source[4]);
+        _cache[source[1]] = mappedCats;
+        _cache[source[0]] = mapped;
+        saveToStorage(source[1], mappedCats);
+        saveToStorage(source[0], mapped);
+      } catch (_) { failed.push(source[0]); }
+    }
+    _adultCatIds = null;
+    ['movie', 'series', 'live'].forEach(function(type) { buildIndex(type); });
+    _startupCatalogFresh = !failed.includes('movie') && !failed.includes('series');
+    return { catalogFresh: _startupCatalogFresh, failed: failed };
+  })();
+  return _startupRefresh;
+}
+
 // Pre-built safe lists (no adult) + lowercase name index for instant search
 var _safe = { movie: null, series: null, live: null };
 var _nameIdx = { movie: null, series: null, live: null };
@@ -145,7 +184,7 @@ function ensureCats(type) {
   });
 }
 
-// ---- Mappers: Xtream format → Retflix format ----
+// ---- Mappers: Xtream format → BurhanTv format ----
 function mapLive(s) {
   return {
     id: s.stream_id, type: 'live', name: s.name || '',
@@ -275,12 +314,12 @@ export var apiTV = {
     var rows = [];
     if (movies.length > 0) {
       var recent = movies.slice().sort(function(a, b) { return (b.added || 0) - (a.added || 0); });
-      rows.push({ title: 'Film aggiunti di recente', items: recent.slice(0, 20), type: 'movie' });
+      rows.push({ titleKey: 'Film aggiunti di recente', title: 'Film aggiunti di recente', items: recent.slice(0, 20), type: 'movie' });
       var topRated = movies.slice().sort(function(a, b) { return (b.rating || 0) - (a.rating || 0); });
-      rows.push({ title: 'Film più votati', items: topRated.slice(0, 20), type: 'movie' });
+      rows.push({ titleKey: 'Più votati', title: 'Film più votati', items: topRated.slice(0, 20), type: 'movie' });
     }
-    if (series.length > 0) rows.push({ title: 'Serie TV', items: series.slice(0, 20), type: 'series' });
-    if (live.length > 0) rows.push({ title: 'Live TV', items: live.slice(0, 20), type: 'live' });
+    if (series.length > 0) rows.push({ titleKey: 'Serie TV', title: 'Serie TV', items: series.slice(0, 20), type: 'series' });
+    if (live.length > 0) rows.push({ titleKey: 'Live TV', title: 'Live TV', items: live.slice(0, 20), type: 'live' });
 
     return Promise.resolve(true).then(function() {
 
@@ -310,7 +349,8 @@ export var apiTV = {
         }
       }
 
-      return { hero: hero, rows: rows, continue: continueItems, recommended: [] };
+      var enrich = hero ? apiTV.detail(hero.type, hero.id).catch(function() { return hero; }) : Promise.resolve(null);
+      return enrich.then(function(item) { return { hero: item, rows: rows, continue: continueItems, recommended: [] }; });
     });
   },
 
@@ -354,7 +394,7 @@ export var apiTV = {
           id: id, type: 'movie', name: info.name || movieData.name || '',
           icon: info.movie_image || info.cover || '',
           backdrop: info.backdrop_path && info.backdrop_path.length > 0 ? info.backdrop_path[0] : (info.movie_image || ''),
-          rating: parseFloat(info.rating) || parseFloat(info.rating_5based) || 0,
+          rating: parseFloat(info.rating) || (parseFloat(info.rating_5based) || 0) * 2,
           plot: info.plot || info.description || '', year: info.releasedate || info.year || '',
           genre: info.genre || '', cast: info.cast || '', director: info.director || '',
           duration: info.duration || '', trailer: info.youtube_trailer || '',
@@ -384,7 +424,7 @@ export var apiTV = {
         return {
           id: id, type: 'series', name: info.name || '',
           icon: info.cover || '', backdrop: info.backdrop_path && info.backdrop_path.length > 0 ? info.backdrop_path[0] : (info.cover || ''),
-          rating: parseFloat(info.rating) || parseFloat(info.rating_5based) || 0,
+          rating: parseFloat(info.rating) || (parseFloat(info.rating_5based) || 0) * 2,
           plot: info.plot || info.description || '', year: info.releaseDate || info.year || '',
           genre: info.genre || '', cast: info.cast || '', director: info.director || '',
           duration: '', trailer: info.youtube_trailer || '',
@@ -484,8 +524,8 @@ export var apiTV = {
     return apiTV.clearProgress(type, id);
   },
 
-  getSettings: function() { return Promise.resolve({ tmdbEnabled: false }); },
-  saveSettings: function() { return Promise.resolve({ tmdbEnabled: false }); },
+  getSettings: function() { return Promise.resolve({ tmdbEnabled: !!tvTmdbKey() }); },
+  saveSettings: function(body) { if (body && typeof body.tmdbKey === 'string') saveTvTmdbKey(body.tmdbKey); return Promise.resolve({ ok: true, tmdbEnabled: !!tvTmdbKey() }); },
 
   getFavorites: function() { return Promise.resolve(getFavoritesData()); },
   addFavorite: function(type, id, name, icon) {
@@ -530,4 +570,19 @@ export function clearCache() {
     localStorage.removeItem('retflix-lib-vodCats');
     localStorage.removeItem('retflix-lib-seriesCats');
   } catch(e) {}
+}
+
+// Enrich provider details without requiring a desktop backend.
+var providerDetail = apiTV.detail;
+// Metadata and ratings load in the visible UI; never delay playback for them.
+apiTV.detail = function(type, id) { return providerDetail(type, id); };
+
+// Public title metadata only: no provider URL, account name, password or stream URL.
+export function assistantCatalogTV(){
+ let metadata={};try{const saved=JSON.parse(localStorage.getItem('burhantv-title-meta-v1')||'{}');Object.keys(saved).forEach(k=>{const parts=k.split(':');metadata[parts[0]+':'+parts[1]]=saved[k].patch||{}})}catch{}
+ const watched={};getProgressData().forEach(p=>{if(p.duration>0&&p.position>=p.duration*.9)watched[(p.parent?'series':p.type)+':'+(p.parent||p.id)]=true});
+ return getSafe('movie').concat(getSafe('series')).map(item=>{
+  const m=metadata[item.type+':'+item.id]||{},year=String(m.year||item.year||'').match(/(?:19|20)\d{2}/)||String(item.name).match(/(?:19|20)\d{2}/);
+  return {id:String(item.id),type:item.type,title:item.name,year:year?year[0]:'',genre:m.genre||item.genre||'',runtimeMinutes:m.runtimeMinutes||undefined,imdbId:m.imdbId||undefined,imdbRating:m.imdbRating||undefined,imdbVotes:m.imdbVotes||undefined,watched:!!watched[item.type+':'+item.id]};
+ });
 }

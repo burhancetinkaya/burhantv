@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { titleMetadata } from '../titleMetadata.js';
+import React, { useState, useEffect, useRef } from 'react';
 import { useI18n } from '../i18n.js';
 import Icon from './Icons.jsx';
 
@@ -6,6 +7,21 @@ var SEVEN_DAYS = 7 * 24 * 3600;
 
 export default function Card({ item, poster, progress, onClick, onRemove, number }) {
   const { t } = useI18n();
+  const cardRef = useRef(null);
+  const [metadata,setMetadata] = useState(null);
+  useEffect(()=>{
+    let alive=true,observer;
+    setMetadata(null);
+    const load=()=>titleMetadata(item).then(data=>{if(alive)setMetadata(data)});
+    if(item.type!=='live'){
+      if(typeof IntersectionObserver==='function'){
+        observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting)){observer.disconnect();load()}},{rootMargin:'100px'});
+        if(cardRef.current)observer.observe(cardRef.current);
+      }else load();
+    }
+    return()=>{alive=false;if(observer)observer.disconnect()};
+  },[item.type,item.id,item.name]);
+  const imdb=metadata||item;
   const [err, setErr] = useState(false);
   const pct = progress && progress.duration > 0
     ? Math.min(100, (progress.position / progress.duration) * 100)
@@ -18,6 +34,7 @@ export default function Card({ item, poster, progress, onClick, onRemove, number
     <div className={'card-wrap' + (number ? ' numbered' : '')}>
       {number && <div className="card-number">{number}</div>}
       <div
+        ref={cardRef}
         className={'card' + (poster ? ' poster' : '')}
         onClick={() => onClick(item)}
         title={item.name}
@@ -25,12 +42,13 @@ export default function Card({ item, poster, progress, onClick, onRemove, number
         data-focusable
         onKeyDown={(e) => { if (e.key === 'Enter' || (e.keyCode || e.which) === 13) { e.preventDefault(); onClick(item); } }}
       >
+        {imdb.imdbRating > 0 && <span className="card-imdb" title={'IMDb · '+imdb.imdbVotes+' oy · '+imdb.imdbUpdated}>IMDb {imdb.imdbRating.toFixed(1)}</span>}
         {item.type === 'live' && <span className="card-badge">{t('Live')}</span>}
-        {isNew && item.type !== 'live' && <span className="card-badge card-badge-new">NUOVO</span>}
+        {isNew && item.type !== 'live' && <span className="card-badge card-badge-new">{t('NUOVO')}</span>}
         {onRemove && (
           <button
             className="card-remove"
-            aria-label="Rimuovi da Continua a guardare"
+            aria-label={t('Rimuovi da Continua a guardare')}
             onClick={(e) => { e.stopPropagation(); onRemove(item); }}
           >
             <Icon name="close" size={16} />
@@ -46,7 +64,7 @@ export default function Card({ item, poster, progress, onClick, onRemove, number
         {pct > 0 && <div className="card-progress"><i style={{ width: pct + '%' }} /></div>}
         <div className="card-focus-info">
           {item.year && <span>{item.year}</span>}
-          {item.rating > 0 && <span>★ {Number(item.rating).toFixed(1)}</span>}
+          {imdb.imdbRating > 0 && <span>IMDb {imdb.imdbRating.toFixed(1)}</span>}
           {item.genre && <span>{item.genre}</span>}
         </div>
       </div>

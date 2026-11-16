@@ -1,3 +1,4 @@
+import { titleMetadata } from '../titleMetadata.js';
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
@@ -27,10 +28,35 @@ export default function Browse({ type }) {
   const [category, _setCategory] = useState(saved.category || '');
   const [sort, _setSort] = useState(saved.sort || (type === 'live' ? 'name' : 'added'));
   const pageRef = useRef(null);
-  const [items, setItems] = useState([]);
-  const [total, setTotal] = useState(0);
-  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState(saved.items || []);
+  const [total, setTotal] = useState(saved.total || 0);
+  const [loading, setLoading] = useState(!saved.items);
+  const restoreLoadedItems = useRef(!!saved.items);
   const [showCats, setShowCats] = useState(false);
+  const [imdbMin,setImdbMin] = useState(saved.imdbMin || 0);
+  const [imdbVotes,setImdbVotes] = useState(saved.imdbVotes || 0);
+  const [imdbData,setImdbData] = useState({});
+  const [imdbChecked,setImdbChecked] = useState(0);
+  const imdbActive = type !== 'live' && (imdbMin > 0 || imdbVotes > 0 || sort === 'imdb');
+  useEffect(()=>{
+    if(!imdbActive)return;
+    let alive=true,checked=0;setImdbChecked(0);
+    items.forEach(item=>titleMetadata(item).then(data=>{
+      if(!alive)return;
+      setImdbData(previous=>({...previous,[item.type+':'+item.id]:data}));
+      setImdbChecked(++checked);
+    }));
+    return()=>{alive=false};
+  },[items,imdbActive]);
+  let displayedItems=items.map(item=>imdbData[item.type+':'+item.id]||item);
+  if(imdbActive)displayedItems=displayedItems.filter(item=>item.imdbRating>0&&item.imdbRating>=imdbMin&&(item.imdbVotes||0)>=imdbVotes);
+  if(sort==='imdb')displayedItems=displayedItems.slice().sort((a,b)=>b.imdbRating-a.imdbRating||(b.imdbVotes||0)-(a.imdbVotes||0));
+  const imdbControls=type==='live'?null:<div className="imdb-filters" data-focus-group>
+    <button className="tv-sort-btn" data-focusable onClick={()=>{const options=[0,6,7,8];setImdbMin(options[(options.indexOf(imdbMin)+1)%options.length])}}>IMDb: {imdbMin?imdbMin+' ve üzeri':'Tümü'}</button>
+    <button className="tv-sort-btn" data-focusable onClick={()=>{const options=[0,1000,10000,100000];setImdbVotes(options[(options.indexOf(imdbVotes)+1)%options.length])}}>En az oy: {imdbVotes?imdbVotes.toLocaleString('tr-TR'):'Sınır yok'}</button>
+    {imdbActive&&<p role="status">Yüklenen {items.length} yapım içinde {imdbChecked}/{items.length} kontrol edildi · {displayedItems.length} sonuç. Daha fazla sonuç için aşağıdan diğer yapımları yükleyin.</p>}
+  </div>;
+
 
   // TV: load items per category when showing "All"
   const [catRows, setCatRows] = useState([]);
@@ -63,7 +89,7 @@ export default function Browse({ type }) {
     setLoading(true);
     const offset = reset ? 0 : items.length;
     try {
-      const res = await api.content({ type, category, sort, limit: PAGE, offset });
+      const res = await api.content({ type, category, sort:sort==='imdb'?'added':sort, limit: PAGE, offset });
       setTotal(res.total);
       setItems(reset ? res.items : [...items, ...res.items]);
     } catch {
@@ -75,6 +101,12 @@ export default function Browse({ type }) {
 
   // reload on filter change
   useEffect(() => {
+    if (restoreLoadedItems.current) {
+      restoreLoadedItems.current = false;
+      // Consume the return snapshot; a later visit loads fresh data again.
+      if (_savedState[type]) { delete _savedState[type].items; delete _savedState[type].total; }
+      return;
+    }
     load(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [type, category, sort]);
@@ -99,7 +131,9 @@ export default function Browse({ type }) {
   // Save state before navigating
   const onItem = (item) => {
     savePageState(stateKey);
-    _savedState[type] = { category: category, sort: sort, showCatPicker: false };
+    _savedState[type] = Object.assign({}, _savedState[type] || {}, {
+      category: category, sort: sort, showCatPicker: false, items: items, total: total, imdbMin: imdbMin, imdbVotes: imdbVotes
+    });
     if (type === 'live') navigate(`/watch/${type}/${item.id}`);
     else openDetail(type, item.id);
   };
@@ -120,7 +154,10 @@ export default function Browse({ type }) {
     function onBack(e) {
       var code = e.keyCode || e.which;
       if (code === 10009 || code === 27) {
+        if (e._tvHandled) return;
         e.preventDefault();
+        e.stopImmediatePropagation();
+        if (e.repeat) { e._tvHandled = true; return; }
         e._tvHandled = true;
         if (showCatPicker) {
           _savedState[type] = {};
@@ -236,17 +273,18 @@ export default function Browse({ type }) {
               <Icon name="chevronLeft" size={22} /> {t('Categorie')}
             </button>
             <button className="tv-sort-btn" data-focusable onClick={function() {
-              var opts = ['added', 'name', 'rating'];
+              var opts = ['added', 'name', 'rating', 'imdb'];
               var idx = opts.indexOf(sort);
               setSort(opts[(idx + 1) % opts.length]);
             }}>
-              {sort === 'added' ? t('Aggiunti di recente') : sort === 'name' ? t('A → Z') : t('Più votati')} ▼
+              {sort === 'imdb' ? 'IMDb puanı' : sort === 'added' ? t('Aggiunti di recente') : sort === 'name' ? t('A → Z') : 'Sağlayıcı puanı'} ▼
             </button>
           </div>
         </div>
 
+        {imdbControls}
         <div className="tv-content-grid">
-          {items.map(function(it) {
+          {displayedItems.map(function(it) {
             return <Card key={it.type + it.id} item={it} poster={true} onClick={onItem} />;
           })}
         </div>
@@ -270,6 +308,7 @@ export default function Browse({ type }) {
         {type !== 'live' && (
           <div className="toolbar">
             <select className="select" value={sort} onChange={(e) => setSort(e.target.value)}>
+              <option value="imdb">IMDb puanı (yüklenenler)</option>
               <option value="added">{t('Aggiunti di recente')}</option>
               <option value="name">{t('A → Z')}</option>
               <option value="rating">{t('Più votati')}</option>
@@ -290,11 +329,12 @@ export default function Browse({ type }) {
         ))}
       </div>
 
+      {imdbControls}
       {items.length === 0 && !loading ? (
         <div className="empty">{t('Ancora niente qui.')}</div>
       ) : (
         <div className={'grid' + (type === 'live' ? ' live' : '')}>
-          {items.map((it) => (
+          {displayedItems.map((it) => (
             <Card key={it.type + it.id} item={it} poster={type !== 'live'} onClick={onItem} />
           ))}
         </div>

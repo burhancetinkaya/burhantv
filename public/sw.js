@@ -1,4 +1,4 @@
-const CACHE = 'retlix-v1';
+const CACHE = 'burhantv-brand-v2';
 const PRECACHE = ['/', '/index.html'];
 
 self.addEventListener('install', (e) => {

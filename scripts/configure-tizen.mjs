@@ -1,0 +1,15 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadEnv } from 'vite';
+const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const env={...loadEnv('production',root,''),...process.env};
+const config={companionUrl:env.VITE_COMPANION_URL||'',backendUrl:env.VITE_BACKEND_URL||'',tmdbApiKey:env.TMDB_API_KEY||''};
+if(env.IPTV_URL&&env.IPTV_USERNAME&&env.IPTV_PASSWORD)config.provider={url:env.IPTV_URL,username:env.IPTV_USERNAME,password:env.IPTV_PASSWORD};
+const file=path.join(root,'tizen-build/index.html');
+let html=fs.readFileSync(file,'utf8');
+html=html.replace(/try\{if\(!localStorage.getItem\("retlix-server"\)\)[^\n]+/,'');
+const json=JSON.stringify(config).replace(/</g,'\\u003c');
+html=html.replace('<head>', '<head><script>window.__BURHANTV_CONFIG__='+json+';<\/script>');
+fs.writeFileSync(file,html,{mode:0o600});fs.chmodSync(file,0o600);
+console.log('Private widget configuration generated from local environment.');

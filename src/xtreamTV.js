@@ -1,11 +1,16 @@
 // Xtream Codes client for Samsung TV — runs entirely in the browser.
 // No server proxy needed. Connects directly to the IPTV provider.
 
+import { tvBootstrap } from './config.js';
 var _provider = null;
 try {
   var saved = localStorage.getItem('retflix-provider');
   if (saved) _provider = JSON.parse(saved);
 } catch(e) {}
+if (!_provider && tvBootstrap.provider) {
+  const p = tvBootstrap.provider;
+  if (p.url && p.username && p.password) saveProvider(p.url, p.username, p.password);
+}
 
 export function getProvider() { return _provider; }
 export function isConfigured() { return !!(_provider && _provider.url && _provider.username && _provider.password); }
@@ -31,10 +36,17 @@ function apiUrl(action) {
 }
 
 function fetchJson(url) {
-  return fetch(url).then(function(r) {
+  var timer;
+  var request = fetch(url, { cache: 'no-store' }).then(function(r) {
     if (!r.ok) throw new Error('HTTP ' + r.status);
     return r.json();
   });
+  return Promise.race([
+    request,
+    new Promise(function(_, reject) {
+      timer = setTimeout(function() { reject(new Error('IPTV bağlantısı zaman aşımına uğradı.')); }, 20000);
+    }),
+  ]).then(function(result) { clearTimeout(timer); return result; }, function(error) { clearTimeout(timer); throw error; });
 }
 
 // API calls — same as Xtream Codes API

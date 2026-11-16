@@ -4,8 +4,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IP="${1:-$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')}"
-echo "📺 Building Retlix Tizen app (backend: http://$IP:3000)"
+IP="${1:-127.0.0.1}"
+echo "📺 Building BurhanTv Tizen app (backend: http://$IP:3000)"
 
 # 1) Build frontend with relative paths
 node -e "
@@ -15,7 +15,7 @@ if (!c.includes(\"base: './'\")) {
   c = c.replace('build: {', \"base: './',\\n  build: {\");
   fs.writeFileSync('vite.config.js', c);
 }"
-npm run build 2>&1 | tail -3
+npm run build
 node -e "
 const fs = require('fs');
 let c = fs.readFileSync('vite.config.js','utf8');
@@ -30,6 +30,7 @@ cp dist/assets/* "$OUT/assets/"
 cp tizen/config.xml "$OUT/"
 cp tizen/icon.png "$OUT/"
 cp tizen/banner.png "$OUT/"
+cp src/assets/burhantv-logo.png "$OUT/burhantv-logo.png"
 
 # 3) Post-process CSS: inline variables + fix gap for Chrome 47
 CSS_SRC=$(ls dist/assets/index-*.css)
@@ -72,12 +73,12 @@ LEGACY=$(basename "$(ls dist/assets/index-legacy-*.js)")
 # 5) Create standalone Tizen index.html
 cat > "$OUT/index.html" << HTMLEOF
 <!DOCTYPE html>
-<html lang="it" class="tv">
+<html lang="tr" class="tv">
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#141414"/>
-  <title>Retlix</title>
+  <title>BurhanTv</title>
   <link rel="stylesheet" href="./assets/$CSS_NAME">
   <script>
     try{if(!localStorage.getItem("retlix-server"))localStorage.setItem("retlix-server","http://$IP:3000")}catch(e){}
@@ -90,11 +91,11 @@ cat > "$OUT/index.html" << HTMLEOF
 <body>
   <!-- Instant splash — visible before JS loads -->
   <div id="splash" style="position:fixed;top:0;left:0;right:0;bottom:0;background:#000;display:-webkit-flex;display:flex;-webkit-flex-direction:column;flex-direction:column;-webkit-align-items:center;align-items:center;-webkit-justify-content:center;justify-content:center;z-index:99999">
-    <div style="color:#e50914;font-size:96px;font-weight:900;letter-spacing:8px;-webkit-animation:spl 1.5s ease forwards;animation:spl 1.5s ease forwards">RETFLIX</div>
+    <div style="color:#e50914;font-size:96px;font-weight:900;letter-spacing:8px;-webkit-animation:spl 1.5s ease forwards;animation:spl 1.5s ease forwards"><img src="./burhantv-logo.png" alt="BurhanTv" style="display:block;width:520px;height:auto"/></div>
     <div style="width:320px;height:6px;background:#333;border-radius:6px;overflow:hidden;margin-top:48px">
       <div style="height:100%;background:#e50914;border-radius:6px;-webkit-animation:splbar 4s ease-in-out forwards;animation:splbar 4s ease-in-out forwards"></div>
     </div>
-    <div style="color:#888;font-size:28px;margin-top:24px">Caricamento…</div>
+    <div style="color:#888;font-size:28px;margin-top:24px">Yükleniyor…</div>
   </div>
   <style>
     @-webkit-keyframes spl{0%{opacity:0;-webkit-transform:scale(.6)}30%{opacity:1;-webkit-transform:scale(1.05)}50%{-webkit-transform:scale(1)}100%{opacity:1;-webkit-transform:scale(1)}}

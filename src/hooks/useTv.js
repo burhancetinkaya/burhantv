@@ -152,10 +152,16 @@ export function useSpatialNav(active) {
           window.scrollBy(0, scrollBy);
 
           // Horizontal: scroll the row-track so the focused card is centered
-          var track = next.parentElement;
+          // Cards are nested inside .card-wrap; their direct parent is not
+          // the scrolling row. Use viewport-relative geometry so wrappers,
+          // numbered cards and focus scaling cannot corrupt the offset.
+          var track = next.closest ? next.closest('.row-track') : null;
           if (track && track.scrollWidth > track.clientWidth) {
-            var targetX = next.offsetLeft - (track.clientWidth / 2) + (next.offsetWidth / 2);
-            track.scrollLeft = Math.max(0, targetX);
+            var cardRect = next.getBoundingClientRect();
+            var trackRect = track.getBoundingClientRect();
+            var targetX = track.scrollLeft + cardRect.left + cardRect.width / 2
+              - trackRect.left - track.clientLeft - track.clientWidth / 2;
+            track.scrollLeft = Math.max(0, Math.min(track.scrollWidth - track.clientWidth, targetX));
           }
         } catch(e) {}
       }

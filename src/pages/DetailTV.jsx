@@ -1,3 +1,5 @@
+import { titleMetadata } from '../titleMetadata.js';
+import FinishTime from '../components/FinishTime.jsx';
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
@@ -22,6 +24,7 @@ export default function DetailTV() {
     api.detail(type, id).then(function(d) {
       if (!alive) return;
       setItem(d);
+      titleMetadata(d).then(metadata=>{ if(alive)setItem(metadata); });
       if (d.seasons) {
         var keys = Object.keys(d.seasons).sort(function(a, b) { return Number(a) - Number(b); });
         setSeason(keys[0] || null);
@@ -35,25 +38,29 @@ export default function DetailTV() {
   // Focus the play button when content loads
   useEffect(function() {
     if (!item) return;
-    setTimeout(function() {
+    var focusTimer = setTimeout(function() {
       var btn = document.querySelector('.tv-detail-actions [data-focusable]');
       if (btn) btn.focus();
     }, 200);
-  }, [item]);
+    return function() { clearTimeout(focusTimer); };
+  }, [!!item]);
 
   // Keyboard handler
   useEffect(function() {
     var onKey = function(e) {
       var code = e.keyCode || e.which;
       if (code === 10009 || code === 27) {
+        if (e._tvHandled) return;
         e.preventDefault();
         e._tvHandled = true;
-        navigate(-1);
+        e.stopImmediatePropagation();
+        // Holding Return must not skip past the previous screen.
+        if (!e.repeat) navigate(-1);
       }
     };
     window.addEventListener('keydown', onKey, true);
-    return function() { window.removeEventListener('keydown', onKey); };
-  }, []);
+    return function() { window.removeEventListener('keydown', onKey, true); };
+  }, [navigate]);
 
   var toggleFav = function() {
     if (isFav) {
@@ -103,11 +110,13 @@ export default function DetailTV() {
         <div className="tv-detail-hero-content">
           <h1 className="tv-detail-title">{item.name}</h1>
           <div className="tv-detail-meta">
-            {item.rating > 0 && <span className="tv-detail-rating"><Icon name="star" size={20} /> {Number(item.rating).toFixed(1)}</span>}
+            {item.imdbRating > 0 && <span className="imdb-pill">IMDb {item.imdbRating.toFixed(1)}/10</span>}
+            {item.imdbVotes > 0 && <span>{item.imdbVotes.toLocaleString('tr-TR')} oy</span>}
             {item.year && <span>{item.year}</span>}
             {item.duration && <span>{item.duration}</span>}
             {item.genre && <span>{item.genre}</span>}
           </div>
+          <FinishTime item={item} />
           <div className="tv-detail-actions" data-focus-group>
             {type !== 'series' && (
               <button className="btn btn-play tv-detail-btn" data-focusable onClick={playMovie}>
@@ -134,6 +143,7 @@ export default function DetailTV() {
 
       {/* Body section */}
       <div className="tv-detail-body">
+        {item.imdbUpdated && <p className="imdb-source">IMDb · {item.imdbUpdated} tarihinde kontrol edildi · puanlar günlük veri setinden alınır.</p>}
         {item.plot && <p className="tv-detail-plot">{item.plot}</p>}
         <div className="tv-detail-info">
           {item.director && <div><b>{t('Regia:')}</b> {item.director}</div>}

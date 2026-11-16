@@ -1,3 +1,4 @@
+import BrandLogo from '../components/BrandLogo';
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api, getServerUrl } from '../api.js';
@@ -67,7 +68,7 @@ export default function Setup() {
     return (
       <div className="sync-screen">
         <div className="sync-box">
-          <div className="logo">RETFLIX</div>
+          <div className="logo"><BrandLogo /></div>
           <div className="sync-stage">{sync.stage === 'complete' ? t('Fatto!') : t('Creazione della libreria…')}</div>
           <div className="sync-msg">{sync.message || ''}</div>
           <div className="progress-track"><div className="progress-fill" style={{ width: (sync.percent || 0) + '%' }} /></div>
@@ -84,7 +85,7 @@ export default function Setup() {
   return (
     <div className="setup">
       <form className="setup-card" onSubmit={submit}>
-        <div className="logo">RETFLIX</div>
+        <div className="logo"><BrandLogo /></div>
         <div className="sub">{t('Collega la tua linea IPTV per iniziare')}</div>
 
         <div className="setup-tabs">

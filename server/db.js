@@ -1,3 +1,4 @@
+import './env.js';
 import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -123,4 +124,8 @@ db.exec(`
   );
 `);
 
+// Optional first-run provider configuration. Existing settings remain authoritative.
+if (!db.prepare('SELECT id FROM provider WHERE id = 1').get() && process.env.IPTV_URL && process.env.IPTV_USERNAME && process.env.IPTV_PASSWORD) {
+  db.prepare('INSERT INTO provider (id, url, username, password, type) VALUES (1, ?, ?, ?, ?)').run(process.env.IPTV_URL, process.env.IPTV_USERNAME, process.env.IPTV_PASSWORD, 'xtream');
+}
 export default db;

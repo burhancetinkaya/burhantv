@@ -4,6 +4,9 @@ import { api, streamUrl, hlsVodMaster, hlsVodTracks, getServerUrl } from '../api
 import { isConfigured as xtreamConfigured, liveUrl as xtreamLive, movieUrl as xtreamMovie, seriesUrl as xtreamSeries } from '../xtreamTV.js';
 import { useI18n } from '../i18n.js';
 import Icon from '../components/Icons.jsx';
+import { notifyReceiver } from '../linkRelay.js';
+import { sentLinkProgress, saveSentLinkProgress } from '../sentLinkHistory.js';
+import useEmbeddedSubtitles from '../hooks/useEmbeddedSubtitles.js';
 
 function fmt(t) {
   if (!t || isNaN(t) || !isFinite(t)) return '0:00';
@@ -16,15 +19,19 @@ function fmt(t) {
     : m + ':' + String(s).padStart(2, '0');
 }
 
-export default function WatchTV() {
+export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var { t } = useI18n();
-  var { type, id } = useParams();
+  var routeParams = useParams();
+  var isExternal = !!externalSource;
+  var type = isExternal ? 'external' : routeParams.type;
+  var id = isExternal ? externalSource.url : routeParams.id;
   var [params] = useSearchParams();
   var navigate = useNavigate();
 
   var videoRef = useRef(null);
   var containerRef = useRef(null);
   var hideTimer = useRef(null);
+  var externalSaveRef = useRef(null);
   var layerRef = useRef('center');
   var baseOffsetRef = useRef(0); // which player layer has focus: 'top' | 'center' | 'bottom'
 
@@ -39,6 +46,10 @@ export default function WatchTV() {
   var [showUI, setShowUI] = useState(true);
   var [status, setStatus] = useState('Caricamento…');
   var [error, setError] = useState('');
+  var [subtitleMenu, setSubtitleMenu] = useState(false);
+  var subtitleMenuRef = useRef(false);
+  subtitleMenuRef.current = subtitleMenu;
+  var subtitles = useEmbeddedSubtitles(isExternal ? externalSource.url : null, time);
 
   var isSeries = type === 'series';
   var isLive = type === 'live';
@@ -46,6 +57,7 @@ export default function WatchTV() {
   // Load content details
   useEffect(function() {
     var alive = true;
+    if (isExternal) { setDetail({name: externalSource.title}); return; }
     api.detail(isSeries ? 'series' : type, id).then(function(d) {
       if (!alive) return;
       setDetail(d);
@@ -77,6 +89,7 @@ export default function WatchTV() {
 
   // Resolve source
   var source = useMemo(function() {
+    if (isExternal) return {streamType:'external',streamId:externalSource.url,title:externalSource.title,url:externalSource.url};
     if (isLive) return { streamType: 'live', streamId: id, ext: 'ts', title: (detail && detail.name) || '' };
     if (type === 'movie') {
       if (!detail) return null;
@@ -101,13 +114,20 @@ export default function WatchTV() {
     var video = videoRef.current;
     if (!video || !source) return;
     setError('');
-    setStatus('Caricamento…');
+    setStatus(t('Caricamento…'));
+    var playbackUrl;
+    var progressReady = false;
+    var resumeHandler = null;
+    if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'received');
 
     function startPlayback(resumePos) {
       var url;
       var directMode = xtreamConfigured();
 
-      if (isLive) {
+      if (isExternal) {
+        url = source.url;
+        baseOffsetRef.current = 0;
+      } else if (isLive) {
         url = directMode ? xtreamLive(source.streamId) : (getServerUrl() + '/api/hls/live/' + source.streamId);
         baseOffsetRef.current = 0;
       } else if (directMode) {
@@ -124,29 +144,39 @@ export default function WatchTV() {
         url = hlsVodMaster(source.streamType, source.streamId, source.ext, resumePos || 0);
       }
 
+      playbackUrl = url;
+      progressReady = false;
+      if(resumeHandler)video.removeEventListener('loadedmetadata',resumeHandler);
+      // Apply the saved time before autoplay; do not let initial zero-time events overwrite it.
+      if(isExternal || (directMode && !isLive && resumePos > 5)){
+        resumeHandler=function(){
+          video.removeEventListener('loadedmetadata',resumeHandler);
+          var target=Math.max(0,resumePos||0);
+          if(isFinite(video.duration)&&video.duration>0)target=Math.min(target,Math.max(0,video.duration-0.25));
+          if(target>0){video.currentTime=target;setTime(target);}
+          progressReady=true;
+        };
+        video.addEventListener('loadedmetadata',resumeHandler);
+      }
       video.src = url;
       video.load();
-
-      // Direct mode: seek to saved position after metadata loads
-      if (directMode && !isLive && resumePos > 5) {
-        var onMeta = function() {
-          video.removeEventListener('loadedmetadata', onMeta);
-          video.currentTime = resumePos;
-        };
-        video.addEventListener('loadedmetadata', onMeta);
-      }
     }
 
     var onCanPlay = function() {
+      video.removeEventListener('canplay', onCanPlay);
       setStatus('');
       video.play().catch(function() {});
     };
     var onError = function() {
-      setError('Impossibile riprodurre questo contenuto.');
+      var message = isExternal ? 'Video açılamadı. Bağlantının süresi dolmuş veya video biçimi TV ile uyumsuz olabilir.' : t('Impossibile riprodurre questo contenuto.');
+      setError(message);
+      if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'error',message);
     };
 
     // Load saved position then start
-    if (!isLive) {
+    if (isExternal) {
+      startPlayback(sentLinkProgress(source.url).position);
+    } else if (!isLive) {
       api.getProgress().then(function(rows) {
         var resumePos = 0;
         for (var i = 0; i < rows.length; i++) {
@@ -179,7 +209,8 @@ export default function WatchTV() {
       retries++;
       setStatus('Riconnessione…');
       var pos = video.currentTime || 0;
-      video.src = url;
+      if(isExternal){video.addEventListener('canplay',onCanPlay);startPlayback(pos);return;}
+      video.src = playbackUrl;
       video.load();
       if (pos > 5) {
         var onSeek = function() { video.removeEventListener('loadedmetadata', onSeek); video.currentTime = pos; video.play().catch(function(){}); };
@@ -189,16 +220,32 @@ export default function WatchTV() {
 
     // Save progress every 10s
     var saver = setInterval(function() {
+      if(isExternal){saveExternalNow();return;}
       if (isLive || !video.duration || isNaN(video.duration)) return;
       api.saveProgress({
         type: source.streamType, id: source.streamId,
         position: baseOffsetRef.current + video.currentTime, duration: video.duration,
         parent: source.seriesId, season: source.season, ep_index: source.epIndex,
       }).catch(function() {});
-    }, 10000);
+    }, isExternal ? 5000 : 10000);
+
+    function saveExternalNow(){
+      if(!isExternal||!progressReady||video.error)return;
+      saveSentLinkProgress(source.url,video.currentTime,video.duration,!!video.ended);
+    }
+    if(isExternal)externalSaveRef.current=saveExternalNow;
+    function onVisibility(){if(document.hidden)saveExternalNow();}
+    if(isExternal){
+      video.addEventListener('pause',saveExternalNow);
+      video.addEventListener('seeked',saveExternalNow);
+      video.addEventListener('ended',saveExternalNow);
+      window.addEventListener('pagehide',saveExternalNow);
+      document.addEventListener('visibilitychange',onVisibility);
+    }
 
     // Save progress on exit
     function saveNow() {
+      if(isExternal){saveExternalNow();return;}
       if (isLive || !video.duration || isNaN(video.duration)) return;
       api.saveProgress({
         type: source.streamType, id: source.streamId,
@@ -209,8 +256,15 @@ export default function WatchTV() {
 
     return function() {
       saveNow();
+      if(isExternal)externalSaveRef.current=null;
       clearInterval(saver);
       clearInterval(watchdog);
+      if(resumeHandler)video.removeEventListener('loadedmetadata',resumeHandler);
+      video.removeEventListener('pause',saveExternalNow);
+      video.removeEventListener('seeked',saveExternalNow);
+      video.removeEventListener('ended',saveExternalNow);
+      window.removeEventListener('pagehide',saveExternalNow);
+      document.removeEventListener('visibilitychange',onVisibility);
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
       video.removeAttribute('src');
@@ -224,7 +278,7 @@ export default function WatchTV() {
     if (!v) return;
     var onTime = function() { setTime(baseOffsetRef.current + v.currentTime); };
     var onDur = function() { setDuration(v.duration || 0); }; // HLS duration grows, but OK for progress bar
-    var onPlay = function() { setPlaying(true); setStatus(''); };
+    var onPlay = function() { setPlaying(true); setStatus(''); if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'playing'); };
     var onPause = function() { setPlaying(false); };
     var onEnded = function() {
       if (isSeries && current < flat.length - 1) setCurrent(function(c) { return c + 1; });
@@ -255,7 +309,7 @@ export default function WatchTV() {
     if (!v || !source) return;
     if (isLive) return;
 
-    if (xtreamConfigured()) {
+    if (isExternal || xtreamConfigured()) {
       // Direct mode: native seek works on MP4 from provider
       var newTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + s));
       v.currentTime = newTime;
@@ -271,9 +325,9 @@ export default function WatchTV() {
       v.src = newUrl;
       v.load();
     }
-  }, [source, isLive]);
+  }, [source, isLive, isExternal]);
 
-  var goBack = function() { navigate(-1); };
+  var goBack = function() { if (subtitleMenu) { setSubtitleMenu(false); return; } if(isExternal && externalSaveRef.current)externalSaveRef.current(); if (isExternal && onExternalClose) onExternalClose(); else navigate(-1); };
   var nextEp = function() { if (isSeries && current < flat.length - 1) setCurrent(current + 1); };
   var prevEp = function() { if (isSeries && current > 0) setCurrent(current - 1); };
 
@@ -283,9 +337,13 @@ export default function WatchTV() {
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(function() {
       var v = videoRef.current;
-      if (v && !v.paused) setShowUI(false);
+      if (v && !v.paused && !subtitleMenuRef.current) setShowUI(false);
     }, 5000);
   }, []);
+
+  useEffect(function(){
+    if(subtitleMenu){clearTimeout(hideTimer.current);setShowUI(true);var timer=setTimeout(function(){var button=containerRef.current.querySelector('.subtitle-menu button.selected')||containerRef.current.querySelector('.subtitle-menu button');if(button)button.focus();},50);return function(){clearTimeout(timer);};}
+  },[subtitleMenu]);
 
   // Helper: focus a button within a player layer
   function focusLayer(layerName) {
@@ -346,6 +404,14 @@ export default function WatchTV() {
         return;
       }
 
+      if (subtitleMenu) {
+        var choices=Array.from(containerRef.current.querySelectorAll('.subtitle-menu button:not(:disabled)'));
+        var active=choices.indexOf(document.activeElement);
+        if(code===13){e.preventDefault();if(active>=0)choices[active].click();return;}
+        if([37,38,39,40].indexOf(code)>=0){e.preventDefault();var dir=(code===37||code===38)?-1:1;var next=Math.max(0,Math.min(choices.length-1,active<0?0:active+dir));if(choices[next])choices[next].focus();return;}
+        return;
+      }
+
       // Enter/OK — if a player button is focused, click it; otherwise toggle play
       if (code === 13) {
         e.preventDefault();
@@ -369,6 +435,9 @@ export default function WatchTV() {
       // D-pad navigation between player layers
       if (code === 38) { // Up
         e.preventDefault();
+        if(layerRef.current==='bottom' && document.activeElement && document.activeElement.tagName!=='INPUT'){
+          var seekBar=containerRef.current.querySelector('.pl-seek input');if(seekBar){seekBar.focus();return;}
+        }
         var curLayer = layerRef.current;
         var li = layers.indexOf(curLayer);
         if (li > 0) {
@@ -382,16 +451,21 @@ export default function WatchTV() {
         var li2 = layers.indexOf(curLayer2);
         if (li2 < layers.length - 1) {
           focusLayer(layers[li2 + 1]);
+        } else {
+          var subtitleButton=containerRef.current.querySelector('.pl-subtitle-button');
+          if(subtitleButton)subtitleButton.focus();
         }
         return;
       }
-      if (code === 37) { // Left — always skip back
+      if (code === 37) { // Left: move between bottom buttons or seek on the timeline
         e.preventDefault();
+        if(layerRef.current==='bottom' && document.activeElement.tagName!=='INPUT' && moveFocusInLayer('left'))return;
         skip(-10);
         return;
       }
-      if (code === 39) { // Right — always skip forward
+      if (code === 39) { // Right: move between bottom buttons or seek on the timeline
         e.preventDefault();
+        if(layerRef.current==='bottom' && document.activeElement.tagName!=='INPUT' && moveFocusInLayer('right'))return;
         skip(10);
         return;
       }
@@ -399,7 +473,7 @@ export default function WatchTV() {
 
     window.addEventListener('keydown', onKey, true);
     return function() { window.removeEventListener('keydown', onKey, true); };
-  }, [poke, togglePlay, skip, current, flat.length]);
+  }, [poke, togglePlay, skip, current, flat.length, subtitleMenu]);
 
   // Focus the center play button on mount
   useEffect(function() {
@@ -408,10 +482,14 @@ export default function WatchTV() {
   }, []);
 
   return (
-    <div className="watch" ref={containerRef} style={{cursor: showUI ? 'default' : 'none'}}>
+    <div className="watch" ref={containerRef} onMouseMove={poke} onTouchStart={poke} style={{cursor: showUI ? 'default' : 'none'}}>
       <video ref={videoRef} playsInline autoPlay style={{width:'100%',height:'100%',background:'#000',objectFit:'contain'}} />
 
       {status && !error && <div className="watch-status"><div className="spinner" /></div>}
+
+      {subtitles.text && <div className={'embedded-caption' + (showUI ? ' controls-visible' : '')} aria-live="off">{subtitles.text}</div>}
+
+      {isExternal && externalSource.historySaved === false && <div className="sent-history-warning" role="status">Video açıldı, ancak TV depolaması dolu olduğu için geçmişe kaydedilemedi.</div>}
 
       {/* Top bar */}
       <div className={'pl-top' + (showUI ? '' : ' hidden')} data-player-layer="top">
@@ -424,7 +502,7 @@ export default function WatchTV() {
         <div className={'pl-center' + (showUI ? '' : ' hidden')} data-player-layer="center">
           {isSeries && <button className="pl-bigbtn" data-focusable onClick={prevEp} disabled={current === 0}><Icon name="prev" size={26} /></button>}
           <button className="pl-bigbtn" data-focusable onClick={function() { skip(-10); }}><Icon name="back10" size={28} /><span>10</span></button>
-          <button className="pl-bigbtn play" data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={34} /></button>
+          <button className="pl-bigbtn play" aria-label={playing ? 'Duraklat' : 'Oynat'} data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={34} /></button>
           <button className="pl-bigbtn" data-focusable onClick={function() { skip(10); }}><Icon name="forward10" size={28} /><span>10</span></button>
           {isSeries && <button className="pl-bigbtn" data-focusable onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={26} /></button>}
         </div>
@@ -438,7 +516,8 @@ export default function WatchTV() {
             <div className="pl-seek-played" style={{width: duration ? (time / duration) * 100 + '%' : 0}} />
             <input
               type="range" min={0} max={duration || 0} step="0.1" value={time}
-              onChange={function(e) { var v = videoRef.current; if (v) { v.currentTime = parseFloat(e.target.value); setTime(v.currentTime); } }}
+              aria-label="Oynatma konumu"
+              onChange={function(e) { poke(); var target = parseFloat(e.target.value); skip(target - time); }}
               data-focusable
             />
           </div>
@@ -446,6 +525,7 @@ export default function WatchTV() {
             <button className="pl-iconbtn" data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={20} /></button>
             <span className="pl-time">{fmt(time)} / {fmt(duration)}</span>
             <div className="pl-spacer" />
+            {subtitles.available && <button className="pl-subtitle-button" aria-expanded={subtitleMenu} data-focusable onClick={function(){poke();setSubtitleMenu(!subtitleMenu);}}>Altyazı{subtitles.selected ? ': ' + (subtitles.tracks.find(function(track){return String(track.id) === subtitles.selected;}) || {}).label : ': Kapalı'}</button>}
             {isSeries && <button className="pl-iconbtn" data-focusable onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={20} /></button>}
           </div>
         </div>
@@ -461,12 +541,20 @@ export default function WatchTV() {
         </div>
       )}
 
+      {subtitleMenu && <section className="subtitle-menu" aria-label="Altyazı seçenekleri" data-player-layer="subtitles">
+        <div className="subtitle-menu-header"><h2>Altyazı</h2><button data-focusable onClick={function(){setSubtitleMenu(false);poke();}}>Kapat</button></div>
+        <p>Videonun içindeki altyazılar</p>
+        <button className={!subtitles.selected ? 'selected' : ''} aria-pressed={!subtitles.selected} data-focusable onClick={function(){subtitles.select('');}}>Kapalı</button>
+        {subtitles.tracks.map(function(track){return <button key={track.id} className={subtitles.selected === String(track.id) ? 'selected' : ''} aria-pressed={subtitles.selected === String(track.id)} data-focusable onClick={function(){subtitles.select(String(track.id));}}>{track.label}</button>;})}
+        {subtitles.status && <p role="status">{subtitles.status}</p>}
+        {subtitles.selected && <div className="subtitle-offset"><span>Altyazı gecikmesi: {subtitles.offset > 0 ? '+' : ''}{subtitles.offset.toFixed(1)} sn</span><div><button data-focusable onClick={function(){subtitles.setOffset(Math.max(-10,subtitles.offset-0.5));}}>−0,5 sn</button><button data-focusable onClick={function(){subtitles.setOffset(0);}}>Sıfırla</button><button data-focusable onClick={function(){subtitles.setOffset(Math.min(10,subtitles.offset+0.5));}}>+0,5 sn</button></div></div>}
+      </section>}
       {error && (
         <div className="watch-error">
           <div className="box">
-            <h3 style={{marginTop: 0}}>Problema di riproduzione</h3>
+            <h3 style={{marginTop: 0}}>Oynatma sorunu</h3>
             <p style={{color: '#bbb'}}>{error}</p>
-            <button className="btn btn-red" data-focusable onClick={goBack}>Torna indietro</button>
+            <button className="btn btn-red" data-focusable onClick={goBack}>Geri dön</button>
           </div>
         </div>
       )}

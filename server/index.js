@@ -1,4 +1,5 @@
 import express from 'express';
+import { registerEmbeddedSubtitles } from './embedded-subtitles.js';
 import compression from 'compression';
 import cors from 'cors';
 import { Readable } from 'stream';
@@ -24,6 +25,7 @@ const app = express();
 app.use(cors());
 app.use(compression());
 app.use(express.json());
+registerEmbeddedSubtitles(app);
 
 // ---------- helpers ----------
 function getProvider() {
