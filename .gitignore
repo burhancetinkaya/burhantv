@@ -44,3 +44,7 @@ docs/TV-GERI-DONUS.md
 docs/TV-YATAY-KAYDIRMA.md
 docs/BURHANTV-MARKA.md
 chatgpt-plugin/**/.codex-plugin/
+
+# Local screenshots can include account/device details.
+docs/screenshots/
+docs/BurhanTv-logo-onay.png
