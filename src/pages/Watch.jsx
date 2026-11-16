@@ -611,6 +611,13 @@ export default function Watch() {
     hideTimer.current = setTimeout(() => { if (!videoRef.current?.paused) { setShowUI(false); setPanel(null); } }, 3200);
   }, []);
 
+  // Autoplay must arm the idle timer even without a mouse/keyboard event.
+  useEffect(() => {
+    if (playing) poke();
+    else { clearTimeout(hideTimer.current); setShowUI(true); }
+    return () => clearTimeout(hideTimer.current);
+  }, [playing, sourceKey, poke]);
+
   useEffect(() => {
     const onKey = (e) => {
       if (['INPUT', 'SELECT', 'TEXTAREA'].includes(e.target.tagName)) return;

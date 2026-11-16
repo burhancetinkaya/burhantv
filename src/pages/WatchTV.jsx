@@ -341,6 +341,14 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     }, 5000);
   }, []);
 
+  // The mount timer may expire while the first video is still loading.
+  // Start a fresh idle period when playback starts (also after pause/resume).
+  useEffect(function() {
+    if (playing && !subtitleMenu) poke();
+    else { clearTimeout(hideTimer.current); setShowUI(true); }
+    return function() { clearTimeout(hideTimer.current); };
+  }, [playing, sourceKey, subtitleMenu, poke]);
+
   useEffect(function(){
     if(subtitleMenu){clearTimeout(hideTimer.current);setShowUI(true);var timer=setTimeout(function(){var button=containerRef.current.querySelector('.subtitle-menu button.selected')||containerRef.current.querySelector('.subtitle-menu button');if(button)button.focus();},50);return function(){clearTimeout(timer);};}
   },[subtitleMenu]);
