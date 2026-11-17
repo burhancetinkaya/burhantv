@@ -53,6 +53,12 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var [time, setTime] = useState(0);
   var [duration, setDuration] = useState(0);
   var [showUI, setShowUI] = useState(true);
+  var showUIRef=useRef(true);showUIRef.current=showUI;
+  var [seekPreview,setSeekPreview]=useState(null);
+  var seekPreviewRef=useRef(null),seekTimer=useRef(null),previewWasPlaying=useRef(false);
+  var [seekBusy,setSeekBusy]=useState(false);
+  var [seekMessage,setSeekMessage]=useState('');
+  var displayTime=seekPreview===null?time:seekPreview;
   var [status, setStatus] = useState('Caricamento…');
   var [error, setError] = useState('');
   var [subtitleMenu, setSubtitleMenu] = useState(false);
@@ -154,6 +160,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     playerRef.current=video;
     element.parentNode.__burhantvPlayer=video;
     setSubtitleMenu(false);setAudioError('');setPlaying(false);setTime(0);setDuration(0);
+    clearTimeout(seekTimer.current);seekPreviewRef.current=null;previewWasPlaying.current=false;setSeekPreview(null);setSeekBusy(false);setSeekMessage('');
     var alive=true;
     setError('');
     setStatus(t('Caricamento…'));
@@ -264,7 +271,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     // Save progress every 10s
     var saver = setInterval(function() {
       if(isExternal){saveExternalNow();return;}
-      if (isLive || !video.duration || isNaN(video.duration)) return;
+      if (isLive || video.seeking || !video.duration || isNaN(video.duration)) return;
       api.saveProgress({
         type: source.streamType, id: source.streamId,
         position: baseOffsetRef.current + video.currentTime, duration: video.duration,
@@ -273,7 +280,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     }, isExternal ? 5000 : 10000);
 
     function saveExternalNow(){
-      if(!isExternal||!progressReady||video.error)return;
+      if(!isExternal||!progressReady||video.error||video.seeking)return;
       saveSentLinkProgress(source.url,video.currentTime,video.duration,!!video.ended);
     }
     if(isExternal)externalSaveRef.current=saveExternalNow;
@@ -289,7 +296,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     // Save progress on exit
     function saveNow() {
       if(isExternal){saveExternalNow();return;}
-      if (isLive || !video.duration || isNaN(video.duration)) return;
+      if (isLive || video.seeking || !video.duration || isNaN(video.duration)) return;
       api.saveProgress({
         type: source.streamType, id: source.streamId,
         position: baseOffsetRef.current + video.currentTime, duration: video.duration,
@@ -299,6 +306,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
 
     return function() {
       alive=false;
+      clearTimeout(seekTimer.current);
       saveNow();
       if(isExternal)externalSaveRef.current=null;
       clearInterval(saver);
@@ -327,6 +335,10 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     readAudio();
     v.addEventListener('trackschanged',readAudio);
     v.addEventListener('loadedmetadata',readAudio);
+    var onSeeking=function(){setSeekBusy(true);};
+    var onSeekDone=function(){setSeekBusy(false);if(seekPreviewRef.current===null)setSeekPreview(null);setTime(baseOffsetRef.current+v.currentTime);};
+    var onSeekError=function(){onSeekDone();setSeekMessage('Bu konuma gidilemedi. Tekrar deneyebilirsin.');};
+    v.addEventListener('seeking',onSeeking);v.addEventListener('seeked',onSeekDone);v.addEventListener('seekerror',onSeekError);
     var onTime = function() { setTime(baseOffsetRef.current + v.currentTime); };
     var onDur = function() { setDuration(v.duration || 0); }; // HLS duration grows, but OK for progress bar
     var onPlay = function() { setPlaying(true); setStatus(''); if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'playing'); };
@@ -340,6 +352,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     v.addEventListener('pause', onPause);
     v.addEventListener('ended', onEnded);
     return function() {
+      v.removeEventListener('seeking',onSeeking);v.removeEventListener('seeked',onSeekDone);v.removeEventListener('seekerror',onSeekError);
       v.removeEventListener('trackschanged',readAudio);
       v.removeEventListener('loadedmetadata',readAudio);
       v.removeEventListener('timeupdate', onTime);
@@ -367,37 +380,56 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     }
   },[originalAudio,audioTracks,audioSourceKey,sourceKey,subtitles.tracks,subtitles.loadedUrl,subtitleUrl,type,id]);
 
-  // Controls
+  // Timeline movement previews a destination without decoding every intermediate frame.
+  var commitSeek = useCallback(function(resume) {
+    var v=playerRef.current,target=seekPreviewRef.current;
+    clearTimeout(seekTimer.current);
+    if(!v || target===null)return;
+    resume=resume || previewWasPlaying.current;previewWasPlaying.current=false;
+    seekPreviewRef.current=null;
+    setSeekMessage('');setSeekBusy(true);
+    if(isExternal || xtreamConfigured()){
+      if(Math.abs(v.currentTime-target)<0.15){setSeekBusy(false);setSeekPreview(null);}
+      else v.currentTime=target;
+    }
+    else {
+      baseOffsetRef.current=Math.floor(target);
+      v.src=hlsVodMaster(source.streamType,source.streamId,source.ext,Math.floor(target));v.load();
+      var ready=function(){v.removeEventListener('canplay',ready);setSeekBusy(false);setSeekPreview(null);if(resume)v.play().catch(function(){});};
+      v.addEventListener('canplay',ready);
+    }
+    setTime(target);
+    if(resume && (isExternal || xtreamConfigured()))v.play().catch(function(){});
+  },[source,isExternal]);
+
+  var previewSeek = useCallback(function(target,autoCommit) {
+    var v=playerRef.current;if(!v || isLive)return;
+    target=Math.max(0,Math.min(v.duration || Infinity,target));
+    if(!autoCommit && seekPreviewRef.current===null){previewWasPlaying.current=!v.paused;if(!v.paused)v.pause();}
+    seekPreviewRef.current=target;setSeekPreview(target);setSeekMessage('');setShowUI(true);
+    clearTimeout(seekTimer.current);
+    if(autoCommit)seekTimer.current=setTimeout(function(){commitSeek(false);},350);
+  },[commitSeek,isLive]);
+
   var togglePlay = useCallback(function() {
     var v = playerRef.current;
     if (!v) return;
+    if(seekPreviewRef.current!==null){commitSeek(true);return;}
     if (v.paused) v.play().catch(function() {}); else v.pause();
-  }, []);
+  }, [commitSeek]);
 
-  var skip = useCallback(function(s) {
-    var v = playerRef.current;
-    if (!v || !source) return;
-    if (isLive) return;
+  var skip = useCallback(function(seconds,previewOnly) {
+    var v=playerRef.current;if(!v || isLive)return;
+    var from=seekPreviewRef.current===null?baseOffsetRef.current+v.currentTime:seekPreviewRef.current;
+    previewSeek(from+seconds,!previewOnly);
+  },[previewSeek,isLive]);
 
-    if (isExternal || xtreamConfigured()) {
-      // Direct mode: native seek works on MP4 from provider
-      var newTime = Math.max(0, Math.min(v.duration || Infinity, v.currentTime + s));
-      v.currentTime = newTime;
-      setTime(newTime);
-    } else {
-      // HLS transcode: restart from new absolute position
-      var absTime = baseOffsetRef.current + (v.currentTime || 0) + s;
-      absTime = Math.max(0, absTime);
-      setStatus('Caricamento…');
-      setTime(absTime);
-      baseOffsetRef.current = Math.floor(absTime);
-      var newUrl = hlsVodMaster(source.streamType, source.streamId, source.ext, Math.floor(absTime));
-      v.src = newUrl;
-      v.load();
-    }
-  }, [source, isLive, isExternal]);
-
-  var goBack = function() { if (subtitleMenu) { setSubtitleMenu(false); return; } if(isExternal && externalSaveRef.current)externalSaveRef.current(); if (isExternal && onExternalClose) onExternalClose(); else navigate(-1); };
+  var goBack = function() {
+    if(subtitleMenu){setSubtitleMenu(false);return;}
+    if(seekPreviewRef.current!==null){clearTimeout(seekTimer.current);seekPreviewRef.current=null;setSeekPreview(null);if(previewWasPlaying.current && playerRef.current)playerRef.current.play().catch(function(){});previewWasPlaying.current=false;return;}
+    if(isExternal && externalSaveRef.current)externalSaveRef.current();
+    if(isExternal && onExternalClose)onExternalClose();else navigate(-1);
+  };
   var nextEp = function() { if (isSeries && current < flat.length - 1) setCurrent(current + 1); };
   var prevEp = function() { if (isSeries && current > 0) setCurrent(current - 1); };
 
@@ -407,7 +439,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(function() {
       var v = playerRef.current;
-      if (v && !v.paused && !subtitleMenuRef.current) setShowUI(false);
+      if (v && !v.paused && !subtitleMenuRef.current && seekPreviewRef.current===null && !v.seeking) setShowUI(false);
     }, 5000);
   }, []);
 
@@ -430,7 +462,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     if (!container) return;
     var layer = container.querySelector('[data-player-layer="' + layerName + '"]');
     if (!layer) return;
-    var btns = layer.querySelectorAll('[data-focusable]');
+    var btns = layer.querySelectorAll('[data-focusable]:not(:disabled)');
     if (!btns.length) return;
     // Prefer the play button in center, first button otherwise
     var target = null;
@@ -472,7 +504,11 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   useEffect(function() {
     var onKey = function(e) {
       var code = e.keyCode || e.which;
+      var wasVisible=showUIRef.current;
       poke();
+      var focusedLayer=document.activeElement && document.activeElement.closest('[data-player-layer]');
+      if(focusedLayer && layers.indexOf(focusedLayer.getAttribute('data-player-layer'))>=0)layerRef.current=focusedLayer.getAttribute('data-player-layer');
+      if([13,27,32,37,38,39,40,19,412,415,417,10009,10252].indexOf(code)>=0){e.preventDefault();e._tvHandled=true;e.stopImmediatePropagation();}
 
       // Back — exit player
       if (code === 10009 || code === 27) {
@@ -493,6 +529,8 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
       // Enter/OK — if a player button is focused, click it; otherwise toggle play
       if (code === 13) {
         e.preventDefault();
+        if(seekPreviewRef.current!==null){commitSeek(true);return;}
+        if(!wasVisible){togglePlay();return;}
         var focused = document.activeElement;
         if (focused && focused.hasAttribute && focused.hasAttribute('data-focusable') && focused.closest && focused.closest('.watch')) {
           focused.click();
@@ -530,37 +568,37 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
         if (li2 < layers.length - 1) {
           focusLayer(layers[li2 + 1]);
         } else {
-          var subtitleButton=containerRef.current.querySelector('.pl-subtitle-button');
-          if(subtitleButton)subtitleButton.focus();
+          var controls=containerRef.current.querySelector('.pl-controls [data-focusable]');
+          if(controls)controls.focus();
         }
         return;
       }
-      if (code === 37) { // Left: move between bottom buttons or seek on the timeline
+      if (code === 37 || code === 39) {
         e.preventDefault();
-        if(layerRef.current==='bottom' && document.activeElement.tagName!=='INPUT' && moveFocusInLayer('left'))return;
-        skip(-10);
-        return;
-      }
-      if (code === 39) { // Right: move between bottom buttons or seek on the timeline
-        e.preventDefault();
-        if(layerRef.current==='bottom' && document.activeElement.tagName!=='INPUT' && moveFocusInLayer('right'))return;
-        skip(10);
+        var direction=code===37?'left':'right';
+        if(document.activeElement && document.activeElement.matches('.pl-seek input'))skip(code===37?-10:10,true);
+        else {
+          if(!wasVisible)focusLayer('center');
+          // At a row boundary, keep focus there; only the timeline scrubs.
+          moveFocusInLayer(direction);
+        }
         return;
       }
     };
 
     window.addEventListener('keydown', onKey, true);
     return function() { window.removeEventListener('keydown', onKey, true); };
-  }, [poke, togglePlay, skip, current, flat.length, subtitleMenu]);
+  }, [poke, togglePlay, skip, commitSeek, current, flat.length, subtitleMenu]);
 
   // Focus the center play button on mount
   useEffect(function() {
     poke();
-    setTimeout(function() { focusLayer('center'); }, 500);
-  }, []);
+    var timer=setTimeout(function() { focusLayer('center'); }, 250);
+    return function(){clearTimeout(timer);};
+  }, [sourceKey]);
 
   return (
-    <div className="watch" ref={containerRef} onMouseMove={poke} onTouchStart={poke} style={{cursor: showUI ? 'default' : 'none'}}>
+    <div className="watch" ref={containerRef} onMouseMove={poke} onTouchStart={poke} onFocusCapture={function(e){var layer=e.target.closest('[data-player-layer]');if(layer && layers.indexOf(layer.getAttribute('data-player-layer'))>=0)layerRef.current=layer.getAttribute('data-player-layer');}} style={{cursor: showUI ? 'default' : 'none'}}>
       <video ref={videoRef} playsInline autoPlay style={{width:'100%',height:'100%',background:'#000',objectFit:'contain'}} />
 
       {status && !error && <div className="watch-status"><div className="spinner" /></div>}
@@ -578,11 +616,11 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
       {/* Center controls */}
       {!error && (
         <div className={'pl-center' + (showUI ? '' : ' hidden')} data-player-layer="center">
-          {isSeries && <button className="pl-bigbtn" data-focusable onClick={prevEp} disabled={current === 0}><Icon name="prev" size={26} /></button>}
-          <button className="pl-bigbtn" data-focusable onClick={function() { skip(-10); }}><Icon name="back10" size={28} /><span>10</span></button>
+          {isSeries && <button className="pl-bigbtn" data-focusable aria-label="Önceki bölüm" onClick={prevEp} disabled={current === 0}><Icon name="prev" size={26} /></button>}
+          <button className="pl-bigbtn" aria-label="10 saniye geri" data-focusable onClick={function() { skip(-10); }}><Icon name="back10" size={28} /><span>10</span></button>
           <button className="pl-bigbtn play" aria-label={playing ? 'Duraklat' : 'Oynat'} data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={34} /></button>
-          <button className="pl-bigbtn" data-focusable onClick={function() { skip(10); }}><Icon name="forward10" size={28} /><span>10</span></button>
-          {isSeries && <button className="pl-bigbtn" data-focusable onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={26} /></button>}
+          <button className="pl-bigbtn" aria-label="10 saniye ileri" data-focusable onClick={function() { skip(10); }}><Icon name="forward10" size={28} /><span>10</span></button>
+          {isSeries && <button className="pl-bigbtn" data-focusable aria-label="Sonraki bölüm" onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={26} /></button>}
         </div>
       )}
 
@@ -591,20 +629,22 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
         <div className={'pl-bottom' + (showUI ? '' : ' hidden')} data-player-layer="bottom">
           <div className="pl-seek">
             <div className="pl-seek-rail" />
-            <div className="pl-seek-played" style={{width: duration ? (time / duration) * 100 + '%' : 0}} />
+            <div className="pl-seek-played" style={{width: duration ? (displayTime / duration) * 100 + '%' : 0}} />
             <input
-              type="range" min={0} max={duration || 0} step="0.1" value={time}
+              type="range" min={0} max={duration || 0} step="0.1" value={displayTime}
               aria-label="Oynatma konumu"
-              onChange={function(e) { poke(); var target = parseFloat(e.target.value); skip(target - time); }}
+              onChange={function(e) { poke(); previewSeek(parseFloat(e.target.value),false); }}
+              onMouseUp={function(){commitSeek(false);}} onTouchEnd={function(){commitSeek(false);}}
               data-focusable
             />
           </div>
+          {(seekPreview!==null || seekBusy || seekMessage) && <div className="pl-seek-hint" role="status">{seekMessage || (seekPreviewRef.current!==null ? fmt(seekPreview) + ' · OK ile bu konumdan oynat · Geri ile iptal' : 'Seçilen konum yükleniyor…')}</div>}
           <div className="pl-controls">
             <button className="pl-iconbtn" data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={20} /></button>
-            <span className="pl-time">{fmt(time)} / {fmt(duration)}</span>
+            <span className="pl-time">{fmt(displayTime)} / {fmt(duration)}</span>
             <div className="pl-spacer" />
             {(subtitles.available || audioTracks.length > 0) && <button className="pl-subtitle-button" aria-expanded={subtitleMenu} data-focusable onClick={function(){poke();setSubtitleMenu(!subtitleMenu);}}>Ses ve altyazı{subtitles.selected ? ': ' + (subtitles.tracks.find(function(track){return String(track.id) === subtitles.selected;}) || {}).label : ': Kapalı'}</button>}
-            {isSeries && <button className="pl-iconbtn" data-focusable onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={20} /></button>}
+            {isSeries && <button className="pl-iconbtn" data-focusable aria-label="Sonraki bölüm" onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={20} /></button>}
           </div>
         </div>
       )}

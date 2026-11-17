@@ -14,7 +14,7 @@ export function createTvMediaPlayer(video) {
   video.parentNode.insertBefore(object, video);
   video.style.display = 'none';
   let generation = 0, disposed = false, ready = false, position = 0, pendingSeek = 0, duration = 0, paused = true, ended = false, error = null, seeking = false;
-  let operation=Promise.resolve();
+  let operation=Promise.resolve(), requestedSeek=null, seekQueued=false;
   function enqueue(action) {
     const epoch=generation;
     const result=operation.then(()=>{if(!disposed && epoch===generation)return action();});
@@ -38,12 +38,27 @@ export function createTvMediaPlayer(video) {
   function seek(target) {
     pendingSeek = Math.max(0, Number(target) || 0);
     if (!ready) return;
-    const targetTime=Math.min(pendingSeek,duration || Infinity),epoch=generation;
-    position=targetTime;seeking=true;
-    enqueue(()=>new Promise(resolve=>{
-      const finish=failed=>{if(!disposed && epoch===generation){seeking=false;if(failed){try{position=av.getCurrentTime()/1000;}catch(_){}}emit(failed?'seekerror':'seeked');emit('timeupdate');}resolve();};
-      try{av.seekTo(Math.round(targetTime*1000),()=>finish(false),()=>finish(true));}catch(_){finish(true);}
-    }));
+    // AVPlay cannot seek to the exact start/end. Drop intermediate targets while
+    // an asynchronous seek is in flight rather than replaying every key repeat.
+    requestedSeek=Math.max(0.1,Math.min(pendingSeek,Math.max(0.1,(duration || Infinity)-0.25)));
+    position=requestedSeek;seeking=true;
+    if(seekQueued)return;
+    seekQueued=true;
+    const epoch=generation;
+    emit('seeking');
+    enqueue(async()=>{
+      let failed=false;
+      while(requestedSeek!==null && !disposed && epoch===generation){
+        const targetTime=requestedSeek;requestedSeek=null;
+        failed=await new Promise(resolve=>{
+          try{av.seekTo(Math.round(targetTime*1000),()=>resolve(false),()=>resolve(true));}catch(_){resolve(true);}
+        });
+      }
+      if(disposed || epoch!==generation)return;
+      seekQueued=false;seeking=false;
+      try{position=av.getCurrentTime()/1000;}catch(_){}
+      emit(failed?'seekerror':'seeked');emit('timeupdate');
+    });
   }
   Object.defineProperties(media, {
     currentTime:{get:()=>position,set:seek}, duration:{get:()=>duration}, paused:{get:()=>paused}, ended:{get:()=>ended},
@@ -51,16 +66,18 @@ export function createTvMediaPlayer(video) {
   });
   media.load = () => {
     const attempt = ++generation;
-    close(); ready=false; paused=true; ended=false; error=null; position=0; pendingSeek=0; duration=0; media.audioTracks=[]; emit('trackschanged');
+    close(); operation=Promise.resolve();requestedSeek=null;seekQueued=false;seeking=false; ready=false; paused=true; ended=false; error=null; position=0; pendingSeek=0; duration=0; media.audioTracks=[]; emit('trackschanged');
     if (!media.src || disposed) return;
     const active = () => !disposed && generation === attempt;
     const fail = () => { if(active()){error={code:4};emit('error');} };
     try {
       av.open(media.src);
+      // Samsung defaults to a large buffer; four seconds is the supported minimum.
+      try{av.setBufferingParam('PLAYER_BUFFER_FOR_PLAY','PLAYER_BUFFER_SIZE_IN_SECOND',4);av.setBufferingParam('PLAYER_BUFFER_FOR_RESUME','PLAYER_BUFFER_SIZE_IN_SECOND',4);av.setTimeoutForBuffering(8);}catch(_){}
       av.setDisplayRect(0,0,1920,1080);
       av.setDisplayMethod('PLAYER_DISPLAY_MODE_LETTER_BOX');
       av.setListener({
-        oncurrentplaytime: milliseconds => {if(active()){position=milliseconds/1000;emit('timeupdate');}},
+        oncurrentplaytime: milliseconds => {if(active() && !seeking){position=milliseconds/1000;emit('timeupdate');}},
         onstreamcompleted:()=>{if(active()){ended=true;paused=true;emit('ended');}},
         onbufferingstart:()=>{if(active())emit('waiting');},
         onbufferingcomplete:()=>{if(active())emit('playing');},

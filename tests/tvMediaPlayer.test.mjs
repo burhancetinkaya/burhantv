@@ -58,3 +58,24 @@ test('resume playback waits for asynchronous seek before calling play', async()=
  const play=p.play();await Promise.resolve();assert.equal(f.calls.includes('play'),false);
  finish();await play;assert.equal(f.calls.at(-1),'play');assert.equal(p.paused,false);
 });
+
+test('rapid seeks collapse to the last destination and ignore stale frame timestamps', async()=>{
+ const f=fixture(),p=f.player,pending=[];
+ window.webapis.avplay.seekTo=(ms,ok)=>{f.calls.push(['seek',ms]);pending.push(ok);};
+ p.src='https://media.example/episode.mp4';p.load();f.prepares[0].ok();await p.play();await p.pause();
+ p.currentTime=90;await Promise.resolve();
+ for(let second=80;second>=10;second-=10)p.currentTime=second;
+ f.listener.oncurrentplaytime(95000);
+ assert.equal(p.currentTime,10);assert.equal(p.seeking,true);
+ assert.deepEqual(f.calls.filter(c=>Array.isArray(c)&&c[0]==='seek'),[['seek',90000]]);
+ pending.shift()();await new Promise(resolve=>setImmediate(resolve));
+ assert.deepEqual(f.calls.filter(c=>Array.isArray(c)&&c[0]==='seek'),[['seek',90000],['seek',10000]]);
+ pending.shift()();await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(p.seeking,false);assert.equal(p.currentTime,10);assert.equal(p.paused,true);
+});
+
+test('seeks clamp away from Samsung unsupported exact start and end positions',async()=>{
+ const f=fixture(),p=f.player;p.src='https://media.example/episode.mp4';p.load();f.prepares[0].ok();
+ p.currentTime=0;await p.play();p.currentTime=120;await p.play();
+ assert.deepEqual(f.calls.filter(c=>Array.isArray(c)&&c[0]==='seek'),[['seek',100],['seek',119750]]);
+});

@@ -1181,3 +1181,6 @@ img { display: block; }
 .imdb-source { color:#aaa; font-size:14px; }.tv .imdb-source { font-size:21px; }
 
 .assistant-card{max-width:900px;background:#202020;border:1px solid #444;border-radius:12px;padding:30px}.assistant-code{display:block;letter-spacing:8px;font-size:42px;color:#f5c518;margin:20px 0}.tv .assistant-page p{font-size:25px}.tv .assistant-code{font-size:58px}.assistant-note{color:#bbb;line-height:1.5}
+
+.pl-seek-hint{color:#fff;font-size:17px;line-height:1.5;padding:8px 0;text-align:center;text-shadow:0 1px 4px #000}
+.tv .pl-seek-hint{font-size:25px;padding:10px 0}
