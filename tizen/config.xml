@@ -5,4 +5,4 @@
 <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable" encryption="disable" install-location="auto" hwkey-event="enable"/>
 <tizen:privilege name="http://tizen.org/privilege/internet"/><tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
 <access origin="*" subdomains="true"/><tizen:allow-navigation>*</tizen:allow-navigation>
-<tizen:content-security-policy>default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; connect-src http: https:; font-src 'self' data:; object-src 'none'</tizen:content-security-policy></widget>
+<tizen:content-security-policy>default-src 'self'; script-src 'self' http://tizen.org 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' http: https: data: blob:; media-src 'self' http: https: blob:; connect-src http: https:; font-src 'self' data:; object-src 'self'</tizen:content-security-policy></widget>

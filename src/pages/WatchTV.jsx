@@ -7,6 +7,7 @@ import Icon from '../components/Icons.jsx';
 import { notifyReceiver } from '../linkRelay.js';
 import { sentLinkProgress, saveSentLinkProgress } from '../sentLinkHistory.js';
 import useEmbeddedSubtitles from '../hooks/useEmbeddedSubtitles.js';
+import { createTvMediaPlayer, audioLabel } from '../tvMediaPlayer.js';
 
 function fmt(t) {
   if (!t || isNaN(t) || !isFinite(t)) return '0:00';
@@ -29,6 +30,9 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var navigate = useNavigate();
 
   var videoRef = useRef(null);
+  var playerRef = useRef(null);
+  var [audioTracks,setAudioTracks] = useState([]);
+  var [audioError,setAudioError] = useState('');
   var containerRef = useRef(null);
   var hideTimer = useRef(null);
   var externalSaveRef = useRef(null);
@@ -49,7 +53,6 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var [subtitleMenu, setSubtitleMenu] = useState(false);
   var subtitleMenuRef = useRef(false);
   subtitleMenuRef.current = subtitleMenu;
-  var subtitles = useEmbeddedSubtitles(isExternal ? externalSource.url : null, time);
 
   var isSeries = type === 'series';
   var isLive = type === 'live';
@@ -108,11 +111,28 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   }, [isLive, type, id, detail, flat, current]);
 
   var sourceKey = source ? source.streamType + ':' + source.streamId : null;
+  var subtitleUrl = source && !isLive ? (isExternal ? source.url : xtreamConfigured() ? (source.streamType === 'movie' ? xtreamMovie(source.streamId,source.ext) : xtreamSeries(source.streamId,source.ext)) : null) : null;
+  var subtitles = useEmbeddedSubtitles(subtitleUrl, time);
+  async function selectAudio(id) {
+    var media=playerRef.current;
+    try {
+      if(media.selectAudio)await media.selectAudio(id);
+      else Array.from(media.audioTracks || []).forEach(function(track,index){track.enabled=String(index)===String(id);});
+      setAudioError('');
+      media.dispatchEvent(new Event('trackschanged'));
+    } catch (_) { setAudioError('Ses dili değiştirilemedi.'); }
+  }
 
-  // Play video — always use HLS transcode for VOD on Samsung TV (seek works reliably)
+
+  // Direct VOD uses Samsung AVPlay for multiple audio tracks; other sources keep HTML5.
   useEffect(function() {
-    var video = videoRef.current;
-    if (!video || !source) return;
+    var element = videoRef.current;
+    if (!element || !source) return;
+    var video = !isExternal && !isLive && xtreamConfigured() ? createTvMediaPlayer(element) : element;
+    playerRef.current=video;
+    element.parentNode.__burhantvPlayer=video;
+    setSubtitleMenu(false);setAudioError('');setPlaying(false);setTime(0);setDuration(0);
+    var alive=true;
     setError('');
     setStatus(t('Caricamento…'));
     var playbackUrl;
@@ -121,6 +141,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'received');
 
     function startPlayback(resumePos) {
+      if(!alive)return;
       var url;
       var directMode = xtreamConfigured();
 
@@ -200,7 +221,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     var retries = 0;
     var maxRetries = isLive ? 9999 : 10;
     var watchdog = setInterval(function() {
-      if (video.paused || video.ended) { stallTime = video.currentTime; stallTicks = 0; return; }
+      if (video.paused || video.ended || video.seeking) { stallTime = video.currentTime; stallTicks = 0; return; }
       if (video.currentTime > stallTime + 0.05) { stallTime = video.currentTime; stallTicks = 0; retries = 0; return; }
       stallTicks++;
       if (stallTicks < 6) return;
@@ -255,6 +276,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     }
 
     return function() {
+      alive=false;
       saveNow();
       if(isExternal)externalSaveRef.current=null;
       clearInterval(saver);
@@ -269,13 +291,20 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
       video.removeEventListener('error', onError);
       video.removeAttribute('src');
       try { video.load(); } catch(e) {}
+      if(video.destroy)video.destroy();
+      if(element.parentNode)delete element.parentNode.__burhantvPlayer;
+      playerRef.current=null;
     };
   }, [sourceKey]);
 
   // Media events
   useEffect(function() {
-    var v = videoRef.current;
+    var v = playerRef.current;
     if (!v) return;
+    var readAudio = function(){setAudioTracks(Array.from(v.audioTracks || []).map(function(track,index){return {id:v.selectAudio?track.id:index,label:track.label||audioLabel(track.language,index),enabled:track.enabled};}));};
+    readAudio();
+    v.addEventListener('trackschanged',readAudio);
+    v.addEventListener('loadedmetadata',readAudio);
     var onTime = function() { setTime(baseOffsetRef.current + v.currentTime); };
     var onDur = function() { setDuration(v.duration || 0); }; // HLS duration grows, but OK for progress bar
     var onPlay = function() { setPlaying(true); setStatus(''); if (isExternal) notifyReceiver(externalSource.token,externalSource.sequence,'playing'); };
@@ -289,23 +318,25 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     v.addEventListener('pause', onPause);
     v.addEventListener('ended', onEnded);
     return function() {
+      v.removeEventListener('trackschanged',readAudio);
+      v.removeEventListener('loadedmetadata',readAudio);
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('durationchange', onDur);
       v.removeEventListener('play', onPlay);
       v.removeEventListener('pause', onPause);
       v.removeEventListener('ended', onEnded);
     };
-  }, [isSeries, current, flat.length]);
+  }, [isSeries, current, flat.length, sourceKey]);
 
   // Controls
   var togglePlay = useCallback(function() {
-    var v = videoRef.current;
+    var v = playerRef.current;
     if (!v) return;
     if (v.paused) v.play().catch(function() {}); else v.pause();
   }, []);
 
   var skip = useCallback(function(s) {
-    var v = videoRef.current;
+    var v = playerRef.current;
     if (!v || !source) return;
     if (isLive) return;
 
@@ -336,7 +367,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
     setShowUI(true);
     clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(function() {
-      var v = videoRef.current;
+      var v = playerRef.current;
       if (v && !v.paused && !subtitleMenuRef.current) setShowUI(false);
     }, 5000);
   }, []);
@@ -533,7 +564,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
             <button className="pl-iconbtn" data-focusable onClick={togglePlay}><Icon name={playing ? 'pause' : 'play'} size={20} /></button>
             <span className="pl-time">{fmt(time)} / {fmt(duration)}</span>
             <div className="pl-spacer" />
-            {subtitles.available && <button className="pl-subtitle-button" aria-expanded={subtitleMenu} data-focusable onClick={function(){poke();setSubtitleMenu(!subtitleMenu);}}>Altyazı{subtitles.selected ? ': ' + (subtitles.tracks.find(function(track){return String(track.id) === subtitles.selected;}) || {}).label : ': Kapalı'}</button>}
+            {(subtitles.available || audioTracks.length > 0) && <button className="pl-subtitle-button" aria-expanded={subtitleMenu} data-focusable onClick={function(){poke();setSubtitleMenu(!subtitleMenu);}}>Ses ve altyazı{subtitles.selected ? ': ' + (subtitles.tracks.find(function(track){return String(track.id) === subtitles.selected;}) || {}).label : ': Kapalı'}</button>}
             {isSeries && <button className="pl-iconbtn" data-focusable onClick={nextEp} disabled={current >= flat.length - 1}><Icon name="next" size={20} /></button>}
           </div>
         </div>
@@ -549,9 +580,13 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
         </div>
       )}
 
-      {subtitleMenu && <section className="subtitle-menu" aria-label="Altyazı seçenekleri" data-player-layer="subtitles">
-        <div className="subtitle-menu-header"><h2>Altyazı</h2><button data-focusable onClick={function(){setSubtitleMenu(false);poke();}}>Kapat</button></div>
-        <p>Videonun içindeki altyazılar</p>
+      {subtitleMenu && <section className="subtitle-menu" aria-label="Ses ve altyazı seçenekleri" data-player-layer="subtitles">
+        <div className="subtitle-menu-header"><h2>Ses ve altyazı</h2><button data-focusable onClick={function(){setSubtitleMenu(false);poke();}}>Kapat</button></div>
+        <p>Ses dili</p>
+        {audioTracks.map(function(track){return <button key={'audio-'+track.id} className={track.enabled?'selected':''} aria-pressed={track.enabled} data-focusable onClick={function(){selectAudio(track.id);}}>{track.label}</button>;})}
+        {!audioTracks.length && <p>Seçilebilir ses parçası bulunamadı.</p>}
+        {audioError && <p role="status">{audioError}</p>}
+        <p>Altyazı</p>
         <button className={!subtitles.selected ? 'selected' : ''} aria-pressed={!subtitles.selected} data-focusable onClick={function(){subtitles.select('');}}>Kapalı</button>
         {subtitles.tracks.map(function(track){return <button key={track.id} className={subtitles.selected === String(track.id) ? 'selected' : ''} aria-pressed={subtitles.selected === String(track.id)} data-focusable onClick={function(){subtitles.select(String(track.id));}}>{track.label}</button>;})}
         {subtitles.status && <p role="status">{subtitles.status}</p>}

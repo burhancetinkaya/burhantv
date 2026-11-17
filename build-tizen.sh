@@ -79,6 +79,7 @@ cat > "$OUT/index.html" << HTMLEOF
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <meta name="theme-color" content="#141414"/>
   <title>BurhanTv</title>
+  <script src="\$WEBAPIS/webapis/webapis.js"></script>
   <link rel="stylesheet" href="./assets/$CSS_NAME">
   <script>
     try{if(!localStorage.getItem("retlix-server"))localStorage.setItem("retlix-server","http://$IP:3000")}catch(e){}

@@ -15,7 +15,8 @@ export default function useAssistant(enabled){
   async function poll(){
    try{
     if(!device)device=await assistantDevice();
-    const v=document.querySelector('.watch video'),err=document.querySelector('.watch-error');
+    const watch=document.querySelector('.watch');
+    const v=watch&&(watch.__burhantvPlayer||watch.querySelector('video')),err=document.querySelector('.watch-error');
     const playback=playbackCommand?{sequence:playbackCommand,state:locationRef.current.pathname!==playbackPath?'closed':err?'error':v&&!v.paused&&v.readyState>=2?'playing':v&&v.readyState>=2?'paused':'opened'}:undefined;
     const result=await assistantRequest('/device/'+device.id+'/poll',{seenSequence:seen,ack,playback},device.token);if(!alive)return;ack=null;
     updateAssistant({connected:result.paired,name:result.name,code:result.code,connectCode:result.connectCode||'',error:''});
