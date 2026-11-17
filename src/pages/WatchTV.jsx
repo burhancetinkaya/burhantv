@@ -7,6 +7,8 @@ import Icon from '../components/Icons.jsx';
 import { notifyReceiver } from '../linkRelay.js';
 import { sentLinkProgress, saveSentLinkProgress } from '../sentLinkHistory.js';
 import useEmbeddedSubtitles from '../hooks/useEmbeddedSubtitles.js';
+import { localizeTvItem } from '../tmdbTV.js';
+import { defaultLanguageTracks, normalizeLanguage } from '../playbackLanguage.js';
 import { createTvMediaPlayer, audioLabel } from '../tvMediaPlayer.js';
 
 function fmt(t) {
@@ -33,6 +35,9 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var playerRef = useRef(null);
   var [audioTracks,setAudioTracks] = useState([]);
   var [audioError,setAudioError] = useState('');
+  var [audioSourceKey,setAudioSourceKey] = useState(null);
+  var [originalAudio,setOriginalAudio] = useState(null);
+  var languageChoice = useRef({});
   var containerRef = useRef(null);
   var hideTimer = useRef(null);
   var externalSaveRef = useRef(null);
@@ -113,14 +118,31 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   var sourceKey = source ? source.streamType + ':' + source.streamId : null;
   var subtitleUrl = source && !isLive ? (isExternal ? source.url : xtreamConfigured() ? (source.streamType === 'movie' ? xtreamMovie(source.streamId,source.ext) : xtreamSeries(source.streamId,source.ext)) : null) : null;
   var subtitles = useEmbeddedSubtitles(subtitleUrl, time);
-  async function selectAudio(id) {
+  if(languageChoice.current.key!==sourceKey)languageChoice.current={key:sourceKey,audio:false,subtitle:false,audioApplied:false,subtitleApplied:false};
+  useEffect(function(){
+    var alive=true;
+    setOriginalAudio(null);
+    if(isExternal || isLive || !detail)return;
+    var key=type+':'+id;
+    if(normalizeLanguage(detail.originalLanguage || detail.original_language)){
+      setOriginalAudio({key:key,language:detail.originalLanguage || detail.original_language});return;
+    }
+    localizeTvItem(Object.assign({},detail,{type:type,id:id}),{originalLanguage:true,skipRatings:true}).then(function(item){
+      if(alive)setOriginalAudio({key:key,language:item.originalLanguage || ''});
+    });
+    return function(){alive=false;};
+  },[detail,type,id,isExternal,isLive]);
+  function selectSubtitle(id){languageChoice.current.subtitle=true;subtitles.select(id);}
+  async function selectAudio(id, automatic) {
+    if(!automatic)languageChoice.current.audio=true;
     var media=playerRef.current;
     try {
       if(media.selectAudio)await media.selectAudio(id);
       else Array.from(media.audioTracks || []).forEach(function(track,index){track.enabled=String(index)===String(id);});
+      if(playerRef.current!==media)return;
       setAudioError('');
       media.dispatchEvent(new Event('trackschanged'));
-    } catch (_) { setAudioError('Ses dili değiştirilemedi.'); }
+    } catch (_) { if(playerRef.current===media)setAudioError('Ses dili değiştirilemedi.'); }
   }
 
 
@@ -301,7 +323,7 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
   useEffect(function() {
     var v = playerRef.current;
     if (!v) return;
-    var readAudio = function(){setAudioTracks(Array.from(v.audioTracks || []).map(function(track,index){return {id:v.selectAudio?track.id:index,label:track.label||audioLabel(track.language,index),enabled:track.enabled};}));};
+    var readAudio = function(){setAudioSourceKey(sourceKey);setAudioTracks(Array.from(v.audioTracks || []).map(function(track,index){return {id:v.selectAudio?track.id:index,language:track.language || '',label:track.label||audioLabel(track.language,index),enabled:track.enabled};}));};
     readAudio();
     v.addEventListener('trackschanged',readAudio);
     v.addEventListener('loadedmetadata',readAudio);
@@ -327,6 +349,23 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
       v.removeEventListener('ended', onEnded);
     };
   }, [isSeries, current, flat.length, sourceKey]);
+
+
+  // Apply each default once per film/episode, after both metadata and tracks arrive.
+  // A manual choice made while metadata is loading always wins.
+  useEffect(function(){
+    if(!originalAudio || originalAudio.key!==type+':'+id || !normalizeLanguage(originalAudio.language))return;
+    var choice=languageChoice.current;
+    var defaults=defaultLanguageTracks(originalAudio.language,audioTracks,subtitles.tracks);
+    if(audioSourceKey===sourceKey && defaults.audio && !choice.audio && !choice.audioApplied){
+      choice.audioApplied=true;
+      if(!defaults.audio.enabled)selectAudio(defaults.audio.id,true);
+    }
+    if(subtitles.loadedUrl===subtitleUrl && !choice.subtitle && !choice.subtitleApplied){
+      choice.subtitleApplied=true;
+      subtitles.select(defaults.subtitle?String(defaults.subtitle.id):'');
+    }
+  },[originalAudio,audioTracks,audioSourceKey,sourceKey,subtitles.tracks,subtitles.loadedUrl,subtitleUrl,type,id]);
 
   // Controls
   var togglePlay = useCallback(function() {
@@ -587,8 +626,8 @@ export default function WatchTV({ externalSource, onExternalClose } = {}) {
         {!audioTracks.length && <p>Seçilebilir ses parçası bulunamadı.</p>}
         {audioError && <p role="status">{audioError}</p>}
         <p>Altyazı</p>
-        <button className={!subtitles.selected ? 'selected' : ''} aria-pressed={!subtitles.selected} data-focusable onClick={function(){subtitles.select('');}}>Kapalı</button>
-        {subtitles.tracks.map(function(track){return <button key={track.id} className={subtitles.selected === String(track.id) ? 'selected' : ''} aria-pressed={subtitles.selected === String(track.id)} data-focusable onClick={function(){subtitles.select(String(track.id));}}>{track.label}</button>;})}
+        <button className={!subtitles.selected ? 'selected' : ''} aria-pressed={!subtitles.selected} data-focusable onClick={function(){selectSubtitle('');}}>Kapalı</button>
+        {subtitles.tracks.map(function(track){return <button key={track.id} className={subtitles.selected === String(track.id) ? 'selected' : ''} aria-pressed={subtitles.selected === String(track.id)} data-focusable onClick={function(){selectSubtitle(String(track.id));}}>{track.label}</button>;})}
         {subtitles.status && <p role="status">{subtitles.status}</p>}
         {subtitles.selected && <div className="subtitle-offset"><span>Altyazı gecikmesi: {subtitles.offset > 0 ? '+' : ''}{subtitles.offset.toFixed(1)} sn</span><div><button data-focusable onClick={function(){subtitles.setOffset(Math.max(-10,subtitles.offset-0.5));}}>−0,5 sn</button><button data-focusable onClick={function(){subtitles.setOffset(0);}}>Sıfırla</button><button data-focusable onClick={function(){subtitles.setOffset(Math.min(10,subtitles.offset+0.5));}}>+0,5 sn</button></div></div>}
       </section>}

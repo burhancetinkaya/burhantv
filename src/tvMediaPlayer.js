@@ -30,7 +30,7 @@ export function createTvMediaPlayer(video) {
       try { current=av.getCurrentStreamInfo().filter(track => track.type === 'AUDIO')[0]; } catch (_) {}
       media.audioTracks = av.getTotalTrackInfo().filter(track => track.type === 'AUDIO').map((track,index) => {
         let info = {}; try { info = JSON.parse(track.extra_info || '{}'); } catch (_) {}
-        return {id:track.index, label:audioLabel(info.language || info.track_lang,index), enabled:!!current && current.index === track.index};
+        return {id:track.index, language:info.language || info.track_lang || '', label:audioLabel(info.language || info.track_lang,index), enabled:!!current && current.index === track.index};
       });
       emit('trackschanged');
     } catch (_) {}

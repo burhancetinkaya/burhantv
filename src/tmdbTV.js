@@ -36,12 +36,13 @@ export function cleanMetadataTitle(item) {
 let saved={};try{saved=JSON.parse(localStorage.getItem('burhantv-title-meta-v1')||'{}')}catch{}
 let persistTimer;
 function persist(key,patch){saved[key]={at:Date.now(),patch};clearTimeout(persistTimer);persistTimer=setTimeout(()=>{try{const keys=Object.keys(saved).sort((a,b)=>saved[b].at-saved[a].at);const out={};keys.slice(0,500).forEach(k=>out[k]=saved[k]);localStorage.setItem('burhantv-title-meta-v1',JSON.stringify(out))}catch{}},500)}
-export async function localizeTvItem(item) {
+export async function localizeTvItem(item, options = {}) {
   if (!item || !tvTmdbKey() || item.type === 'live') return item;
   let language = 'tr';try { language = localStorage.getItem('retlix-lang') || 'tr'; } catch {}
   const key=[item.type,item.id,item.name,language].join(':');
-  if(cache[key])return {...item,...cache[key]};
+  if(cache[key] && (!options.originalLanguage || cache[key].originalLanguage !== undefined))return {...item,...cache[key]};
   const previous=saved[key];let patch=previous&&Date.now()-previous.at<7*86400000?previous.patch:null;
+  if(options.originalLanguage && patch && patch.originalLanguage === undefined)patch=null;
   if(!patch){
     const type=item.type==='series'?'tv':'movie',clean=cleanMetadataTitle(item);
     if(!clean.name)return item;
@@ -55,7 +56,7 @@ export async function localizeTvItem(item) {
     if(!info)return item;
     const aliases=[info.title,info.name,info.original_title,info.original_name].concat((info.alternative_titles?.titles||info.alternative_titles?.results||[]).map(t=>t.title));
     if(!aliases.some(n=>normalized(n)===normalized(clean.name)))return item;
-    patch={tmdbId:info.id,imdbId:info.imdb_id||info.external_ids?.imdb_id||'',
+    patch={originalLanguage:info.original_language||'',tmdbId:info.id,imdbId:info.imdb_id||info.external_ids?.imdb_id||'',
       plot:info.overview||item.plot||'',genre:(info.genres||[]).map(g=>g.name).join(', ')||item.genre||'',
       year:String(info.release_date||info.first_air_date||item.year||'').slice(0,4),
       runtimeMinutes:type==='movie'?Number(info.runtime)||0:0,
@@ -63,9 +64,10 @@ export async function localizeTvItem(item) {
   }
   const knownScore=patch.imdbRating?patch:
     (previous?.patch?.imdbId===patch.imdbId?previous.patch:patch);
-  const score=await imdbRating(patch.imdbId,{
+  const score=options.skipRatings?null:await imdbRating(patch.imdbId,{
     rating:knownScore.imdbRating,votes:knownScore.imdbVotes,updated:knownScore.imdbUpdated
   });
+  if(options.skipRatings && knownScore.imdbRating)patch={...patch,imdbRating:knownScore.imdbRating,imdbVotes:knownScore.imdbVotes,imdbUpdated:knownScore.imdbUpdated};
   if(score)patch={...patch,imdbRating:score.rating,imdbVotes:score.votes,imdbUpdated:score.updated};
   cache[key]=patch;persist(key,patch);return {...item,...patch};
 }
